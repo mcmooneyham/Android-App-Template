@@ -36,7 +36,7 @@ import com.mattmooneyham.base.android.managers.eventStateOrNull
 
 /**
  * Home tab. Simple event-backed values are observed straight from the
- * event bus via the SDK's Compose-native [eventState] helpers; the
+ * event bus via the Compose-native [eventState] helpers; the
  * viewmodel supplies only the greeting and write actions. Rendering
  * lives in the previewable [HomePageContent].
  */
@@ -112,7 +112,7 @@ private fun HomePageContent(
         )
 
         HeroCard(
-            label = "Shared SDK",
+            label = "App core",
             headline = greeting,
             isOnline = isOnline,
         )

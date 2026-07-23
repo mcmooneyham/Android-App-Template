@@ -26,7 +26,7 @@ import okio.use
 object LogsCleared : SignalKey(eventName = "log.Cleared")
 
 /**
- * Central logging entry point for the SDK and its host apps. Every line
+ * Central logging entry point for the whole app. Every line
  * carries the full context of the call, in fixed-width pipe-separated
  * columns:
  *
@@ -55,7 +55,7 @@ object LogsCleared : SignalKey(eventName = "log.Cleared")
  *
  * The log file rotates by size: when it reaches
  * [maxLogFileSizeBytes], it is renamed with a `.1` inserted before
- * the extension (base-sdk.log becomes base-sdk.1.log, replacing any
+ * the extension (base-app.log becomes base-app.1.log, replacing any
  * previous rotation), and a fresh file starts. At most one rotated
  * file is kept, capping total disk use at roughly twice the limit.
  *
@@ -65,7 +65,7 @@ object LogsCleared : SignalKey(eventName = "log.Cleared")
  * @param clock source of wall time for line timestamps; injected so
  *   tests can pin time and assert exact lines.
  * @param maxLogFileSizeBytes rotation threshold, configurable via
- *   SdkConfig.
+ *   AppConfig.
  */
 @OptIn(ExperimentalAtomicApi::class)
 class LogManager(
@@ -399,7 +399,7 @@ class LogManager(
         .format(LOG_TIMESTAMP_FORMAT)
 
     companion object {
-        const val DEFAULT_LOG_FILE_NAME = "base-sdk.log"
+        const val DEFAULT_LOG_FILE_NAME = "base-app.log"
 
         // Rotation cap: two files of this size is ample demo/support
         // history while staying invisible next to any app's cache use.

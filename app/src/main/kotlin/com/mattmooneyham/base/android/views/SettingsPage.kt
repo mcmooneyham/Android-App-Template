@@ -39,9 +39,9 @@ import com.mattmooneyham.base.android.constants.BrandColors
 import kotlinx.coroutines.launch
 
 /**
- * Settings tab: preference and log maintenance backed by the SDK managers,
- * plus app version info. The share sheet for exporting logs is fired here
- * (UI concern); the log contents come from the SDK's LogManager.
+ * Settings tab: preference and log maintenance backed by the app core
+ * managers, plus app version info. The share sheet for exporting logs is
+ * fired here (UI concern); the log contents come from the LogManager.
  */
 @Composable
 fun SettingsPage(settingsViewModel: SettingsViewModel) {
@@ -89,7 +89,7 @@ private fun SettingsContent(
             title = { Text(text = "Clear logs?") },
             text = {
                 Text(
-                    text = "This deletes the SDK log file and cannot " +
+                    text = "This deletes the app's log file and cannot " +
                         "be undone.",
                 )
             },
@@ -142,7 +142,7 @@ private fun SettingsContent(
             SettingsRow(
                 icon = Icons.Filled.Share,
                 title = "Export logs",
-                supportingText = "Share the SDK log file contents",
+                supportingText = "Share the app's log file contents",
                 onClick = onExportLogs,
             )
             HorizontalDivider(
@@ -152,7 +152,7 @@ private fun SettingsContent(
             SettingsRow(
                 icon = Icons.Filled.Delete,
                 title = "Clear logs",
-                supportingText = "Delete the SDK log file",
+                supportingText = "Delete the app's log file",
                 isDestructive = true,
                 onClick = { isClearLogsDialogVisible = true },
             )

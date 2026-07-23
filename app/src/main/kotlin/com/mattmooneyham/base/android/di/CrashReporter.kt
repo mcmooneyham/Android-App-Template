@@ -3,7 +3,7 @@ package com.mattmooneyham.base.android.di
 /**
  * Boundary for crash and error reporting (Crashlytics, Sentry, ...).
  * The template ships only the seam plus a no-op default; wire a real
- * reporter through [SdkConfig.crashReporter] when adopting one.
+ * reporter through [AppConfig.crashReporter] when adopting one.
  */
 interface CrashReporter {
 

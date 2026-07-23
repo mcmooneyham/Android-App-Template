@@ -33,7 +33,7 @@ data class JokeState(
 )
 
 /**
- * Owns the demo joke feature, following the SDK's event-driven manager
+ * Owns the demo joke feature, following the app's event-driven manager
  * convention: the manager fetches and publishes; everything else just
  * listens. It loads the first joke eagerly at initialization, so the UI
  * never has to ask for data, only for refreshes.

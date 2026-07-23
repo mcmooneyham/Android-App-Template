@@ -10,11 +10,11 @@ version, or wire up before the first build.
 Event-driven, managers publish and everything else listens:
 
 - Business-logic layer, side by side with the UI packages:
-  - `di/`: `SdkConfig` (the composition root's single input: file
+  - `di/`: `AppConfig` (the composition root's single input: file
     paths, log level, API base URL, and an HTTP-client factory seam for
     tests) and `AppComponent` (manual constructor injection with a
     reverse-order `close()`); `BaseApplication.onCreate` constructs the
-    single component before anything else runs, and `SdkModule` is a
+    single component before anything else runs, and `AppModule` is a
     thin Hilt adapter exposing the component's members to `@Inject`
     sites.
   - `managers/`: `EventManager` (replay-1 event bus with weak, owner-based
@@ -27,7 +27,7 @@ Event-driven, managers publish and everything else listens:
     contracts are typed `StateKey`/`SignalKey` objects declared beside
     the manager that publishes them, with namespaced event names such
     as `"joke.StateChanged"`.
-  - `api/`: Ktor `ApiClient` (base URL in `SdkConfig.apiBaseUrl`) with
+  - `api/`: Ktor `ApiClient` (base URL in `AppConfig.apiBaseUrl`) with
     JSON content negotiation; DTOs live beside it.
 - UI layer:
   - `views/` + `views/components/`: pages and reusable components; every

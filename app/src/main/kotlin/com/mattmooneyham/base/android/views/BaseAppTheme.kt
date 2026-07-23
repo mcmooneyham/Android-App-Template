@@ -11,7 +11,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.mattmooneyham.base.android.constants.BrandColors
 
 /**
- * App theme built from the SDK's shared [BrandColors] semantic tokens
+ * App theme built from the shared [BrandColors] semantic tokens
  * (PM Color Reference Guide), so every screen renders the same brand
  * palette from one source of truth.
  */

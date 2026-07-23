@@ -45,7 +45,7 @@ private val RefreshTint = Color(BrandColors.BRAND)
 
 /**
  * Demo REST card: an icon-tile header matching the SettingsRow language,
- * the SDK-fetched joke with a quote-bar punchline, pulsing skeleton
+ * the API-fetched joke with a quote-bar punchline, pulsing skeleton
  * lines while the first joke loads, and an inline error row.
  */
 @Composable
@@ -89,7 +89,7 @@ fun JokeCard(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = "Fresh from the shared SDK",
+                        text = "Fresh from the Joke API",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

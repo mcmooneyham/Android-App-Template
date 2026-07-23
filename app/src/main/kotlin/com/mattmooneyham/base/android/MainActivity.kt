@@ -22,8 +22,8 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    // Provided to the whole composition so views can listen to SDK events
-    // directly (see LocalEventManager/eventState).
+    // Provided to the whole composition so views can listen to app core
+    // events directly (see LocalEventManager/eventState).
     @Inject
     lateinit var eventManager: EventManager
 
@@ -34,7 +34,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        // Demonstrates the SDK's DataStore-backed preference round trip:
+        // Demonstrates the DataStore-backed preference round trip:
         // the first cold start renders "First launch", later ones
         // "Welcome back!" (until cleared from Settings).
         mainViewModel.markWelcomeSeen()

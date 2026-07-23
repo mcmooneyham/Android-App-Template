@@ -36,7 +36,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /** Asks the SDK for a fresh joke; the result arrives as events. */
+    /** Asks the app core for a fresh joke; the result arrives as events. */
     fun refreshJoke() {
         jokeManager.refreshJoke()
     }

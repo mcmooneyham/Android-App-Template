@@ -20,9 +20,9 @@ import kotlinx.serialization.json.Json
  * The app's composition root: a plain class that wires every manager by
  * manual constructor injection. Constructing the component is what
  * starts the managers' event publishing; BaseApplication builds exactly
- * ONE instance per process, and Hilt's SdkModule exposes its members to
+ * ONE instance per process, and Hilt's AppModule exposes its members to
  * @Inject sites. Tests build a fresh component per test (with boundary
- * fakes supplied through [SdkConfig]) and [close] it in teardown.
+ * fakes supplied through [AppConfig]) and [close] it in teardown.
  *
  * Wiring conventions:
  * - Properties initialize top to bottom, so declaration order IS the
@@ -33,7 +33,7 @@ import kotlinx.serialization.json.Json
  * - The one sanctioned setter cycle is [EventManager.attachLogManager],
  *   called in the init block below; add no others.
  */
-class AppComponent(config: SdkConfig) {
+class AppComponent(config: AppConfig) {
 
     private val constructionStart = TimeSource.Monotonic.markNow()
 

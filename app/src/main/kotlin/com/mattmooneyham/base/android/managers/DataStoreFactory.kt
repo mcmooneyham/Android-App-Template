@@ -15,7 +15,7 @@ import okio.Path.Companion.toPath
 import okio.SYSTEM
 
 // DataStore requires this exact file extension; it is checked at runtime.
-const val DATA_STORE_FILE_NAME = "base_sdk.preferences_pb"
+const val DATA_STORE_FILE_NAME = "base_app.preferences_pb"
 
 /**
  * The scope DataStore runs its IO on. Created by whoever owns the store

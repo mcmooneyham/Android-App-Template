@@ -106,7 +106,7 @@ fun HeroCard(
 private fun HeroCardPreview() {
     BaseAppTheme {
         HeroCard(
-            label = "Shared SDK",
+            label = "App core",
             headline = "Hello, Android 36!",
             isOnline = true,
         )

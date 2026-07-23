@@ -39,7 +39,7 @@ import kotlinx.serialization.json.Json
  * @param maxLogFileSizeBytes size at which the log file rotates to
  *   its single ".1" history file.
  */
-data class SdkConfig(
+data class AppConfig(
     val appFilesDirectoryPath: String,
     val platformContext: Any? = null,
     val minimumLogLevel: LogLevel? = null,

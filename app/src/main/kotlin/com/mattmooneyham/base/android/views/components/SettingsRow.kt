@@ -130,7 +130,7 @@ private fun SettingsRowPreview() {
         SettingsRow(
             icon = Icons.Filled.Delete,
             title = "Clear logs",
-            supportingText = "Delete the SDK log file",
+            supportingText = "Delete the app's log file",
             isDestructive = true,
             onClick = {},
         )

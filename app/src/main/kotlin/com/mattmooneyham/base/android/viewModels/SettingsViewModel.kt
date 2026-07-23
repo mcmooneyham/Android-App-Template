@@ -10,8 +10,8 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Backs the Settings tab: preference and log maintenance through the SDK
- * singletons, plus the app's version info for the About section.
+ * Backs the Settings tab: preference and log maintenance through the app
+ * core managers, plus the app's version info for the About section.
  */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -42,7 +42,7 @@ class SettingsViewModel @Inject constructor(
         return logManager.readLogContents()
     }
 
-    /** Deletes the SDK log file. */
+    /** Deletes the app's log file. */
     fun clearLogs() {
         logManager.clearLogs()
         logManager.info("Log file cleared from Settings")

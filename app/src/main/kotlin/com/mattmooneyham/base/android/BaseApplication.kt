@@ -2,13 +2,13 @@ package com.mattmooneyham.base.android
 
 import android.app.Application
 import com.mattmooneyham.base.android.di.AppComponent
-import com.mattmooneyham.base.android.di.SdkConfig
+import com.mattmooneyham.base.android.di.AppConfig
 import dagger.hilt.android.HiltAndroidApp
 
 /**
  * Application entry point. Constructs the process's single
  * [AppComponent] (which wires every manager and starts their event
- * publishing) before anything can inject; Hilt's SdkModule then simply
+ * publishing) before anything can inject; Hilt's AppModule then simply
  * exposes the component's members to @Inject sites, so the app declares
  * only @HiltAndroidApp here and @AndroidEntryPoint on activities.
  */
@@ -25,7 +25,7 @@ class BaseApplication : Application() {
 
     override fun onCreate() {
         appComponent = AppComponent(
-            SdkConfig(
+            AppConfig(
                 appFilesDirectoryPath = filesDir.path,
                 platformContext = this,
             ),
