@@ -46,10 +46,26 @@ object LogsCleared : SignalKey(eventName = "log.Cleared")
  * File writes are serialized on a single background writer, so logging
  * never performs IO on the calling thread; [readLogContents] is
  * therefore eventually consistent with in-flight lines ([flush] awaits
- * the writer when determinism is needed, e.g. in tests).
+ * the writer when determinism is needed, e.g. in tests). Two
+ * exceptions to the async rule, both in service of crash forensics:
+ * ERROR-level lines drain the write queue synchronously before the
+ * logging call returns (an error is exactly the line a post-mortem
+ * needs on disk), and [flushForCrash] lets a dying process make the
+ * same best-effort drain from any thread.
+ *
+ * The log file rotates by size: when it reaches
+ * [maxLogFileSizeBytes], it is renamed with a `.1` inserted before
+ * the extension (base-sdk.log becomes base-sdk.1.log, replacing any
+ * previous rotation), and a fresh file starts. At most one rotated
+ * file is kept, capping total disk use at roughly twice the limit.
  *
  * Provided as a singleton via
  * [com.mattmooneyham.base.android.di.AppComponent].
+ *
+ * @param clock source of wall time for line timestamps; injected so
+ *   tests can pin time and assert exact lines.
+ * @param maxLogFileSizeBytes rotation threshold, configurable via
+ *   SdkConfig.
  */
 @OptIn(ExperimentalAtomicApi::class)
 class LogManager(
@@ -58,6 +74,8 @@ class LogManager(
     private val minimumLogLevel: LogLevel = LogLevel.DEBUG,
     private val fileLoggingEnabled: Boolean = true,
     private val eventManager: EventManager? = null,
+    private val clock: Clock = Clock.System,
+    private val maxLogFileSizeBytes: Long = DEFAULT_MAX_LOG_FILE_BYTES,
 ) : ConfinedManager(
     managerName = "LogManager",
     // The logger cannot report its own rails failures through itself
@@ -82,36 +100,54 @@ class LogManager(
 
     private val droppedLineCount = AtomicInt(0)
 
+    // Serializes all file access between the background writer and the
+    // synchronous drain paths (ERROR flush, flushForCrash), so lines
+    // never interleave and rotation checks stay race-free.
+    private val fileAccessLock = Any()
+
     init {
         // The single writer loop lives on the manager's confinement;
         // each command's blocking file IO is offloaded with onIo, per
-        // the ConfinedManager rule (state read before, written after).
+        // the ConfinedManager rule. No confined state is touched: the
+        // command execution uses only the atomic drop counter and the
+        // file lock, which is what lets the drain paths share it.
         managerScope.launch {
             for (command in fileCommands) {
-                when (command) {
-                    is LogFileCommand.Append -> {
-                        val droppedLines = droppedLineCount.exchange(0)
-                        onIo {
-                            if (droppedLines > 0) {
-                                appendToLogFile(
-                                    "[LogManager] $droppedLines log " +
-                                        "line(s) dropped under burst",
-                                )
-                            }
-                            appendToLogFile(command.line)
-                        }
+                onIo { executeFileCommand(command) }
+            }
+        }
+    }
+
+    /**
+     * Executes one file command, blocking the calling thread. Safe
+     * from the writer AND from synchronous drains: the channel hands
+     * each command to exactly one consumer, and [fileAccessLock]
+     * serializes the file itself.
+     */
+    private fun executeFileCommand(command: LogFileCommand) {
+        when (command) {
+            is LogFileCommand.Append -> {
+                val droppedLines = droppedLineCount.exchange(0)
+                synchronized(fileAccessLock) {
+                    if (droppedLines > 0) {
+                        appendToLogFile(
+                            "[LogManager] $droppedLines log " +
+                                "line(s) dropped under burst",
+                        )
                     }
-                    is LogFileCommand.Clear -> {
-                        val cleared = onIo { deleteLogFile() }
-                        // Announce only after the delete actually ran,
-                        // preserving delete-then-announce order; trigger
-                        // is thread-safe from the writer.
-                        if (cleared) eventManager?.trigger(LogsCleared)
-                    }
-                    is LogFileCommand.Flush ->
-                        command.acknowledgement.complete(Unit)
+                    appendToLogFile(command.line)
                 }
             }
+            is LogFileCommand.Clear -> {
+                val cleared =
+                    synchronized(fileAccessLock) { deleteLogFile() }
+                // Announce only after the delete actually ran,
+                // preserving delete-then-announce order; trigger is
+                // thread-safe from any consumer.
+                if (cleared) eventManager?.trigger(LogsCleared)
+            }
+            is LogFileCommand.Flush ->
+                command.acknowledgement.complete(Unit)
         }
     }
 
@@ -147,7 +183,10 @@ class LogManager(
             return "$directory/$logFileName"
         }
 
-    /** Full contents of the log file; empty when missing or unreadable. */
+    /**
+     * Full contents of the LIVE log file; empty when missing or
+     * unreadable. Rotated history (the ".1" file) is not included.
+     */
     fun readLogContents(): String {
         val path = logFilePath ?: return ""
         return runCatching {
@@ -190,6 +229,35 @@ class LogManager(
     }
 
     /**
+     * Synchronous, best-effort persistence for a dying process: drains
+     * every queued file command on the CALLING thread, from any
+     * thread, suspending nothing. Called by the uncaught-exception
+     * handler the AppComponent installs, after the crash has been
+     * logged, so the log file ends with the crash. Best-effort: a line
+     * the background writer has already claimed but not yet written
+     * cannot be waited on here. Never throws.
+     */
+    fun flushForCrash() {
+        drainPendingFileCommands()
+    }
+
+    /**
+     * Steals queued commands from the channel and executes them
+     * synchronously. Racing the background writer is safe: the channel
+     * delivers each command to exactly one consumer and file access is
+     * locked.
+     */
+    private fun drainPendingFileCommands() {
+        runCatching {
+            while (true) {
+                val command =
+                    fileCommands.tryReceive().getOrNull() ?: break
+                executeFileCommand(command)
+            }
+        }
+    }
+
+    /**
      * Stops the file writer for good. Buffered lines may be dropped;
      * callers that need them persisted (tests, export flows) should
      * [flush] first. A closed manager still writes to Logcat, never to
@@ -226,6 +294,11 @@ class LogManager(
             // the writer can leave an honest marker instead of a silent
             // gap.
             if (enqueued.isFailure) droppedLineCount.fetchAndAdd(1)
+            // Flush policy: ERROR lines reach disk before this call
+            // returns (best-effort). Errors precede crashes often
+            // enough that leaving them queued risks losing exactly the
+            // evidence a post-mortem needs.
+            if (level == LogLevel.ERROR) drainPendingFileCommands()
         }
     }
 
@@ -256,9 +329,23 @@ class LogManager(
         return "$classPart$methodPart ($filePart:$linePart)"
     }
 
+    /** Path the live file rotates to, ".1" before the extension. */
+    private val rotatedLogFilePath: String?
+        get() {
+            val path = logFilePath ?: return null
+            val extension = path.substringAfterLast('.', "")
+            return if (extension.isEmpty()) {
+                "$path.1"
+            } else {
+                "${path.substringBeforeLast('.')}.1.$extension"
+            }
+        }
+
+    /** Callers hold [fileAccessLock]; see [executeFileCommand]. */
     private fun appendToLogFile(logLine: String) {
         val path = logFilePath ?: return
         runCatching {
+            rotateLogFileIfOversized(path)
             FileSystem.SYSTEM
                 .appendingSink(path.toPath(), mustExist = false)
                 .buffer()
@@ -266,20 +353,57 @@ class LogManager(
         }
     }
 
+    /**
+     * Size-capped rotation: once the live file reaches the cap it
+     * becomes the single ".1" history file (replacing any previous
+     * one) and appends continue into a fresh live file.
+     */
+    private fun rotateLogFileIfOversized(livePath: String) {
+        val rotatedPath = rotatedLogFilePath ?: return
+        val liveFilePath = livePath.toPath()
+        val liveSize =
+            FileSystem.SYSTEM.metadataOrNull(liveFilePath)?.size ?: 0L
+        if (liveSize < maxLogFileSizeBytes) return
+        runCatching {
+            FileSystem.SYSTEM.delete(
+                rotatedPath.toPath(),
+                mustExist = false,
+            )
+            FileSystem.SYSTEM.atomicMove(
+                liveFilePath,
+                rotatedPath.toPath(),
+            )
+        }
+    }
+
+    /**
+     * Deletes the live AND rotated files (clearing history means all
+     * of it). Callers hold [fileAccessLock].
+     */
     private fun deleteLogFile(): Boolean {
         val path = logFilePath ?: return true
         return runCatching {
+            rotatedLogFilePath?.let { rotatedPath ->
+                FileSystem.SYSTEM.delete(
+                    rotatedPath.toPath(),
+                    mustExist = false,
+                )
+            }
             FileSystem.SYSTEM.delete(path.toPath(), mustExist = false)
             true
         }.getOrDefault(false)
     }
 
-    private fun currentUtcTimestamp(): String = Clock.System.now()
+    private fun currentUtcTimestamp(): String = clock.now()
         .toLocalDateTime(TimeZone.UTC)
         .format(LOG_TIMESTAMP_FORMAT)
 
     companion object {
         const val DEFAULT_LOG_FILE_NAME = "base-sdk.log"
+
+        // Rotation cap: two files of this size is ample demo/support
+        // history while staying invisible next to any app's cache use.
+        const val DEFAULT_MAX_LOG_FILE_BYTES = 512L * 1024L
         private const val DEFAULT_TAG = "App"
         private const val WRITER_BUFFER_CAPACITY = 512
 

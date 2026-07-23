@@ -1,9 +1,5 @@
 package com.mattmooneyham.base.android.managers
 
-import android.content.Context
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,18 +16,18 @@ object NetworkConnectivityChanged : StateKey<Boolean>(
 
 /**
  * Owns connectivity state for the app: state, events, and logging. The
- * raw ConnectivityManager hookup lives at the bottom of this file.
+ * platform hookup lives behind the injected [ConnectivityMonitor]
+ * boundary (see AndroidConnectivityMonitor for the real one; tests
+ * inject a fake and drive changes by hand).
  *
  * Provided as a singleton via
  * [com.mattmooneyham.base.android.di.AppComponent]; monitoring starts
  * on construction.
- *
- * @param platformContext any Context (the application context is used).
  */
 class NetworkManager(
     private val logManager: LogManager,
     private val eventManager: EventManager,
-    platformContext: Any?,
+    private val connectivityMonitor: ConnectivityMonitor,
 ) : ConfinedManager(
     managerName = "NetworkManager",
     failureLogManager = logManager,
@@ -50,8 +46,8 @@ class NetworkManager(
         // the constructing thread, which is safe: no managerScope
         // coroutine can exist yet.
         publishConnectivity(mutableConnectivityState.value)
-        startPlatformConnectivityMonitoring(platformContext) { isConnected ->
-            // System callbacks arrive on a platform thread; hop onto
+        connectivityMonitor.start { isConnected ->
+            // Monitor callbacks arrive on a platform thread; hop onto
             // the manager's confinement so the read-then-publish below
             // is race-free. The serial scope preserves callback order.
             managerScope.launch {
@@ -68,7 +64,7 @@ class NetworkManager(
 
     /** Stops monitoring; a stopped manager cannot be restarted. */
     fun stopMonitoring() {
-        stopPlatformConnectivityMonitoring()
+        connectivityMonitor.stop()
     }
 
     /** Stops monitoring, then cancels the manager's coroutines. */
@@ -83,63 +79,3 @@ class NetworkManager(
     }
 
 }
-
-// Raw ConnectivityManager wiring; all state/event behavior lives in
-// NetworkManager above. Module-level state is safe because the app
-// constructs one NetworkManager per process (one AppComponent).
-private var systemConnectivityManager: ConnectivityManager? = null
-private var activeNetworkCallback: ConnectivityManager.NetworkCallback? = null
-
-/**
- * Starts the system network monitor; [onConnectivityChanged] receives
- * validated connectivity soon after and on every change, possibly from a
- * background thread. Calling again while active is a no-op.
- */
-private fun startPlatformConnectivityMonitoring(
-    platformContext: Any?,
-    onConnectivityChanged: (Boolean) -> Unit,
-) {
-    if (activeNetworkCallback != null) return
-    val applicationContext =
-        (platformContext as? Context)?.applicationContext ?: return
-
-    val connectivityManager = applicationContext
-        .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-
-    val callback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) {
-            onConnectivityChanged(true)
-        }
-
-        override fun onLost(network: Network) {
-            onConnectivityChanged(false)
-        }
-
-        override fun onCapabilitiesChanged(
-            network: Network,
-            networkCapabilities: NetworkCapabilities,
-        ) {
-            onConnectivityChanged(
-                networkCapabilities.hasValidatedInternet(),
-            )
-        }
-    }
-
-    systemConnectivityManager = connectivityManager
-    activeNetworkCallback = callback
-    connectivityManager.registerDefaultNetworkCallback(callback)
-}
-
-/** Stops the system network monitor; it cannot be restarted. */
-private fun stopPlatformConnectivityMonitoring() {
-    activeNetworkCallback?.let { callback ->
-        systemConnectivityManager?.unregisterNetworkCallback(callback)
-    }
-    activeNetworkCallback = null
-    systemConnectivityManager = null
-}
-
-private fun NetworkCapabilities.hasValidatedInternet(): Boolean =
-    hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-        hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-

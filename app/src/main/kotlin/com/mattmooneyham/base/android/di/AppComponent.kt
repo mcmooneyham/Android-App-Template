@@ -2,6 +2,7 @@ package com.mattmooneyham.base.android.di
 
 import com.mattmooneyham.base.android.api.ApiClient
 import com.mattmooneyham.base.android.api.createDefaultJson
+import com.mattmooneyham.base.android.managers.AndroidConnectivityMonitor
 import com.mattmooneyham.base.android.managers.DATA_STORE_FILE_NAME
 import com.mattmooneyham.base.android.managers.DataStoreManager
 import com.mattmooneyham.base.android.managers.EventManager
@@ -43,6 +44,8 @@ class AppComponent(config: SdkConfig) {
         minimumLogLevel = config.minimumLogLevel
             ?: defaultMinimumLogLevel(config.platformContext),
         eventManager = eventManager,
+        clock = config.clock,
+        maxLogFileSizeBytes = config.maxLogFileSizeBytes,
     )
 
     init {
@@ -55,7 +58,10 @@ class AppComponent(config: SdkConfig) {
     val networkManager = NetworkManager(
         logManager = logManager,
         eventManager = eventManager,
-        platformContext = config.platformContext,
+        // The boundary seam: production builds the real Android
+        // monitor from the Context, tests inject a fake.
+        connectivityMonitor = config.connectivityMonitor
+            ?: AndroidConnectivityMonitor(config.platformContext),
     )
 
     // Held here, not inside the factory, so close() can cancel the
@@ -86,7 +92,32 @@ class AppComponent(config: SdkConfig) {
         eventManager = eventManager,
     )
 
+    // Crash safety: the handler below chains in FRONT of whatever was
+    // installed (typically the platform's process-killing handler),
+    // reports the fatal, gets the crash and any queued lines onto disk
+    // synchronously, then delegates. Every step is guarded: a broken
+    // reporter or logger must never mask the original crash.
+    private val previousUncaughtExceptionHandler =
+        Thread.getDefaultUncaughtExceptionHandler()
+
+    private val crashUncaughtExceptionHandler =
+        Thread.UncaughtExceptionHandler { thread, throwable ->
+            runCatching { config.crashReporter.recordFatal(throwable) }
+            runCatching {
+                logManager.error(
+                    "Uncaught exception on thread ${thread.name}",
+                    throwable = throwable,
+                )
+                logManager.flushForCrash()
+            }
+            previousUncaughtExceptionHandler
+                ?.uncaughtException(thread, throwable)
+        }
+
     init {
+        Thread.setDefaultUncaughtExceptionHandler(
+            crashUncaughtExceptionHandler,
+        )
         logManager.info(
             "AppComponent constructed in " +
                 "${constructionStart.elapsedNow().inWholeMilliseconds} ms",
@@ -100,6 +131,16 @@ class AppComponent(config: SdkConfig) {
      * reused; construct a new one (which tests do per test).
      */
     fun close() {
+        // Uninstall the crash handler first so a crash during or after
+        // teardown never routes through closed managers; restore only
+        // if ours is still installed (never clobber a later one).
+        if (Thread.getDefaultUncaughtExceptionHandler() ===
+            crashUncaughtExceptionHandler
+        ) {
+            Thread.setDefaultUncaughtExceptionHandler(
+                previousUncaughtExceptionHandler,
+            )
+        }
         jokeManager.close()
         apiClient.httpClient.close()
         dataStoreManager.close()

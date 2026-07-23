@@ -42,6 +42,17 @@ data class JokeState(
  * payload carries the whole story: REFRESHING while a fetch is in
  * flight, then SUCCESS with the joke or FAILED with a detail message
  * (both keeping the last good joke available).
+ *
+ * CHOREOGRAPHY EXEMPLAR: this manager also demonstrates the canonical
+ * cross-manager pattern by listening to [NetworkConnectivityChanged].
+ * When the last fetch FAILED and connectivity transitions from false
+ * to true, it auto-refreshes exactly once per failure. The pattern:
+ * subscribe in init with the manager ITSELF as owner (the subscription
+ * then lives exactly as long as the manager), and hop the reaction
+ * onto the manager's own confinement before touching mutable state,
+ * because listener callbacks are delivered on Main. Managers stay
+ * peers: each reacts to the other's published events, and neither
+ * holds a reference to the other.
  */
 class JokeManager(
     private val apiClient: ApiClient,
@@ -59,8 +70,46 @@ class JokeManager(
     private var isFetchInFlight = false
     private var latestJoke: JokeDto? = null
 
+    // Choreography state (confined like the fields above): the retry
+    // ticket is armed by a FAILED fetch and consumed by the first
+    // false-to-true connectivity transition, so each failure earns at
+    // most one automatic refresh. The last observed connectivity
+    // starts null so the replayed subscription seed sets a baseline
+    // without ever counting as a transition.
+    private var shouldRetryOnReconnect = false
+    private var lastObservedConnectivity: Boolean? = null
+
     init {
         refreshJoke()
+        // Canonical cross-manager subscription (see the class KDoc):
+        // owner = this ties the subscription to the manager's lifetime;
+        // the callback arrives on Main, so the reaction hops onto the
+        // manager's own confinement before touching state.
+        eventManager.listenTo(
+            NetworkConnectivityChanged,
+            owner = this,
+        ) { isConnected ->
+            managerScope.launch { reactToConnectivity(isConnected) }
+        }
+    }
+
+    /**
+     * Runs on the manager's confinement. Refreshes once when
+     * connectivity comes back after a failed fetch; every other
+     * combination only updates the baseline.
+     */
+    private fun reactToConnectivity(isConnected: Boolean) {
+        val cameBackOnline =
+            lastObservedConnectivity == false && isConnected
+        lastObservedConnectivity = isConnected
+        if (cameBackOnline && shouldRetryOnReconnect) {
+            logManager.info(
+                "Connectivity restored; retrying failed joke fetch",
+            )
+            // refreshJoke consumes the ticket; if a fetch is already in
+            // flight, its own terminal state decides whether to re-arm.
+            refreshJoke()
+        }
     }
 
     /**
@@ -72,6 +121,9 @@ class JokeManager(
         managerScope.launch {
             if (isFetchInFlight) return@launch
             isFetchInFlight = true
+            // Any accepted refresh supersedes a pending reconnect
+            // retry; a new failure below re-arms it.
+            shouldRetryOnReconnect = false
             publishState(JokeState(status = JokeStatus.REFRESHING))
             val terminalState = try {
                 logManager.debug("Fetching a random joke")
@@ -88,6 +140,11 @@ class JokeManager(
                     "Joke fetch failed [${failure.kind}]: ${failure.detail}",
                 )
                 JokeState(status = JokeStatus.FAILED, failure = failure)
+            }
+            // A failure arms the reconnect retry (see class KDoc);
+            // written before the terminal publish like the flag below.
+            if (terminalState.status == JokeStatus.FAILED) {
+                shouldRetryOnReconnect = true
             }
             // The flag clears BEFORE the terminal publish: the moment a
             // listener hears SUCCESS or FAILED, a new refresh must be
