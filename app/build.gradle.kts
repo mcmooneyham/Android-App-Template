@@ -38,13 +38,14 @@ dependencies {
     implementation(libs.ktor.client.contentNegotiation)
     implementation(libs.ktor.serialization.kotlinxJson)
 
-    // Hilt injects the managers; their bindings live in di/SdkModule.
+    // Hilt injects the managers; their bindings live in di/AppModule.
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    // JVM unit tests (app/src/test): the architecture guard today; the
-    // manager and event-contract suites arrive with the testing
-    // skeleton. The Ktor MockEngine backs SdkConfig.httpClientFactory.
+    // JVM unit tests (app/src/test): the architecture guard plus the
+    // manager, event-contract, and choreography specs, all running a
+    // real AppComponent with boundary fakes (see testkit/). The Ktor
+    // MockEngine backs AppConfig.httpClientFactory.
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.ktor.client.mock)

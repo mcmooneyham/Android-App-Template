@@ -1,0 +1,49 @@
+package com.mattmooneyham.base.android.testkit
+
+import com.mattmooneyham.base.android.managers.ConnectivityMonitor
+
+/**
+ * Test double for the connectivity boundary. NetworkManager starts it
+ * during component construction; tests then drive connectivity changes
+ * deterministically with [setConnected].
+ *
+ * The callback is invoked on the CALLER's thread, mirroring the real
+ * monitor's "possibly from a background thread" contract;
+ * NetworkManager hops onto its own confinement either way, so
+ * connectivity-driven assertions must await events rather than assume
+ * synchronous publication.
+ */
+class FakeConnectivityMonitor : ConnectivityMonitor {
+
+    @Volatile
+    private var onConnectivityChanged: ((Boolean) -> Unit)? = null
+
+    /** Whether [stop] has been called (by NetworkManager.close()). */
+    @Volatile
+    var isStopped: Boolean = false
+        private set
+
+    /** Whether the manager under test started the monitor. */
+    val isStarted: Boolean
+        get() = onConnectivityChanged != null
+
+    override fun start(onConnectivityChanged: (Boolean) -> Unit) {
+        // Mirror the real monitor: starting twice is a no-op.
+        if (this.onConnectivityChanged != null) return
+        this.onConnectivityChanged = onConnectivityChanged
+    }
+
+    override fun stop() {
+        onConnectivityChanged = null
+        isStopped = true
+    }
+
+    /** Reports a connectivity change as the platform would. */
+    fun setConnected(isConnected: Boolean) {
+        val callback = onConnectivityChanged ?: error(
+            "setConnected called before the monitor was started; " +
+                "construct the component first",
+        )
+        callback(isConnected)
+    }
+}
