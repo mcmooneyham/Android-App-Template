@@ -10,13 +10,15 @@ version, or wire up before the first build.
 Event-driven, managers publish and everything else listens:
 
 - Business-logic layer, side by side with the UI packages:
-  - `di/`: `AppConfig` (the composition root's single input: file
-    paths, log level, API base URL, and an HTTP-client factory seam for
-    tests) and `AppComponent` (manual constructor injection with a
-    reverse-order `close()`); `BaseApplication.onCreate` constructs the
-    single component before anything else runs, and `AppModule` is a
-    thin Hilt adapter exposing the component's members to `@Inject`
-    sites.
+  - `di/`: `AppConfig` (the composition root's single input: the files
+    directory, connectivity-monitor boundary, log level, API base URL,
+    and an HTTP-client factory seam for tests) and `AppComponent`
+    (manual constructor injection with a reverse-order `close()`);
+    `BaseApplication.onCreate` builds every platform-touching value
+    (typed `File`, `AndroidConnectivityMonitor`) at the edge and
+    constructs the single Context-free component before anything else
+    runs, and `AppModule` is a thin Hilt adapter exposing the
+    component's members to `@Inject` sites.
   - `managers/`: `EventManager` (replay-1 event bus with weak, owner-based
     listeners plus Compose helpers in `EventManagerCompose.kt`),
     `LogManager` (Logcat + log file with full call-site context),

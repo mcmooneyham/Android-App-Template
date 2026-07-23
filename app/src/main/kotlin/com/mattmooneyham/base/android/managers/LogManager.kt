@@ -1,7 +1,5 @@
 package com.mattmooneyham.base.android.managers
 
-import android.content.Context
-import android.content.pm.ApplicationInfo
 import android.util.Log
 import com.mattmooneyham.base.android.constants.LogLevel
 import kotlin.concurrent.atomics.AtomicInt
@@ -280,8 +278,8 @@ class LogManager(
         val callSite = currentCallSite()
         val tag = explicitTag ?: callSite?.className ?: DEFAULT_TAG
         val logLine = buildLogLine(level, tag, message, callSite)
-        // Guarded like the file write: "logging never throws" includes the
-        // platform logger (absent, for example, on JVM host tests).
+        // Guarded like the file write: "logging never throws" includes
+        // Logcat, whose android.util.Log stub throws in JVM unit tests.
         runCatching { writePlatformLog(level, tag, logLine, throwable) }
         if (fileLoggingEnabled && logFilePath != null) {
             val enqueued = fileCommands.trySend(
@@ -486,15 +484,4 @@ private fun currentCallSite(): CallSite? {
 
 private fun currentThreadName(): String =
     Thread.currentThread().name
-
-// A library module cannot read the app's BuildConfig.DEBUG; the reliable
-// debuggability signal is the FLAG_DEBUGGABLE bit on the application the
-// host already hands over as platformContext.
-internal fun defaultMinimumLogLevel(platformContext: Any?): LogLevel {
-    val applicationFlags = (platformContext as? Context)
-        ?.applicationInfo?.flags ?: 0
-    val isDebuggable =
-        applicationFlags and ApplicationInfo.FLAG_DEBUGGABLE != 0
-    return if (isDebuggable) LogLevel.DEBUG else LogLevel.INFO
-}
 

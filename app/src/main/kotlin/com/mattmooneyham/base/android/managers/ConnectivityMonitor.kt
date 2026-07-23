@@ -31,15 +31,18 @@ interface ConnectivityMonitor {
  * an interface). All state is instance-owned, so per-test components
  * never share monitor state.
  *
- * @param platformContext any Context (the application context is
- *   used); null (the JVM-test case) makes [start] a no-op.
+ * This is the Android adapter side of the boundary: it is constructed
+ * in BaseApplication (the only layer that holds a Context) and handed
+ * to the component through AppConfig, keeping the managers Context-free
+ * and JVM-testable with a fake.
+ *
+ * @param context any Context; the application context is retained.
  */
 class AndroidConnectivityMonitor(
-    platformContext: Any?,
+    context: Context,
 ) : ConnectivityMonitor {
 
-    private val applicationContext =
-        (platformContext as? Context)?.applicationContext
+    private val applicationContext: Context = context.applicationContext
 
     private var systemConnectivityManager: ConnectivityManager? = null
     private var activeNetworkCallback:
@@ -47,9 +50,8 @@ class AndroidConnectivityMonitor(
 
     override fun start(onConnectivityChanged: (Boolean) -> Unit) {
         if (activeNetworkCallback != null) return
-        val context = applicationContext ?: return
 
-        val connectivityManager = context
+        val connectivityManager = applicationContext
             .getSystemService(Context.CONNECTIVITY_SERVICE)
             as ConnectivityManager
 

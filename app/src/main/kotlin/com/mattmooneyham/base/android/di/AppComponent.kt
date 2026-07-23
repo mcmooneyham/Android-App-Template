@@ -2,7 +2,6 @@ package com.mattmooneyham.base.android.di
 
 import com.mattmooneyham.base.android.api.ApiClient
 import com.mattmooneyham.base.android.api.createDefaultJson
-import com.mattmooneyham.base.android.managers.AndroidConnectivityMonitor
 import com.mattmooneyham.base.android.managers.DATA_STORE_FILE_NAME
 import com.mattmooneyham.base.android.managers.DataStoreManager
 import com.mattmooneyham.base.android.managers.EventManager
@@ -11,7 +10,7 @@ import com.mattmooneyham.base.android.managers.LogManager
 import com.mattmooneyham.base.android.managers.NetworkManager
 import com.mattmooneyham.base.android.managers.createDataStoreScope
 import com.mattmooneyham.base.android.managers.createPreferencesDataStore
-import com.mattmooneyham.base.android.managers.defaultMinimumLogLevel
+import java.io.File
 import kotlin.time.TimeSource
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.Json
@@ -40,9 +39,8 @@ class AppComponent(config: AppConfig) {
     val eventManager = EventManager()
 
     val logManager = LogManager(
-        logDirectoryPath = config.appFilesDirectoryPath,
-        minimumLogLevel = config.minimumLogLevel
-            ?: defaultMinimumLogLevel(config.platformContext),
+        logDirectoryPath = config.appFilesDirectory.absolutePath,
+        minimumLogLevel = config.minimumLogLevel,
         eventManager = eventManager,
         clock = config.clock,
         maxLogFileSizeBytes = config.maxLogFileSizeBytes,
@@ -58,10 +56,10 @@ class AppComponent(config: AppConfig) {
     val networkManager = NetworkManager(
         logManager = logManager,
         eventManager = eventManager,
-        // The boundary seam: production builds the real Android
-        // monitor from the Context, tests inject a fake.
-        connectivityMonitor = config.connectivityMonitor
-            ?: AndroidConnectivityMonitor(config.platformContext),
+        // The boundary seam: BaseApplication passes the real Android
+        // monitor, tests inject a fake. The component itself never
+        // touches Android connectivity types.
+        connectivityMonitor = config.connectivityMonitor,
     )
 
     // Held here, not inside the factory, so close() can cancel the
@@ -71,8 +69,8 @@ class AppComponent(config: AppConfig) {
     val dataStoreManager = DataStoreManager(
         dataStore = createPreferencesDataStore(
             coroutineScope = dataStoreScope,
-            producePath = {
-                "${config.appFilesDirectoryPath}/$DATA_STORE_FILE_NAME"
+            produceFile = {
+                File(config.appFilesDirectory, DATA_STORE_FILE_NAME)
             },
         ),
         eventManager = eventManager,

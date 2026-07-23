@@ -5,14 +5,12 @@ import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
+import java.io.File
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
-import okio.FileSystem
-import okio.Path.Companion.toPath
-import okio.SYSTEM
 
 // DataStore requires this exact file extension; it is checked at runtime.
 const val DATA_STORE_FILE_NAME = "base_app.preferences_pb"
@@ -44,24 +42,22 @@ fun createDataStoreScope(): CoroutineScope = CoroutineScope(
  */
 fun createPreferencesDataStore(
     coroutineScope: CoroutineScope,
-    producePath: () -> String,
+    produceFile: () -> File,
 ): DataStore<Preferences> =
-    PreferenceDataStoreFactory.createWithPath(
+    PreferenceDataStoreFactory.create(
         // A corrupt store falls back to defaults instead of failing reads.
         corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
         scope = coroutineScope,
         produceFile = {
-            val storeFilePath = producePath().toPath()
+            val storeFile = produceFile()
             // Pre-create an empty store (a valid, empty Preferences file)
             // so DataStore's first read never throws FileNotFoundException.
             runCatching {
-                if (!FileSystem.SYSTEM.exists(storeFilePath)) {
-                    storeFilePath.parent?.let { parentDirectory ->
-                        FileSystem.SYSTEM.createDirectories(parentDirectory)
-                    }
-                    FileSystem.SYSTEM.write(storeFilePath) { }
+                if (!storeFile.exists()) {
+                    storeFile.parentFile?.mkdirs()
+                    storeFile.createNewFile()
                 }
             }
-            storeFilePath
+            storeFile
         },
     )

@@ -2,7 +2,7 @@ package com.mattmooneyham.base.android.api
 
 import io.ktor.client.plugins.ResponseException
 import io.ktor.serialization.ContentConvertException
-import kotlinx.io.IOException
+import java.io.IOException
 import kotlinx.serialization.SerializationException
 
 /** Broad category of a failed remote fetch, for UI copy decisions. */

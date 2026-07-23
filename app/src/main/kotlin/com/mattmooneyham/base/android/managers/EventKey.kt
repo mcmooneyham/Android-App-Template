@@ -40,8 +40,7 @@ abstract class AnyEventKey(
 /**
  * A replayed state event, declared as an `object` next to the manager
  * that publishes it. The generic parameter makes the payload part of
- * the key's TYPE, so a mistyped publish or subscribe no longer compiles
- * on the Kotlin side:
+ * the key's TYPE, so a mistyped publish or subscribe does not compile:
  *
  * ```
  * // Beside its manager:

@@ -1,8 +1,10 @@
 package com.mattmooneyham.base.android
 
 import android.app.Application
+import com.mattmooneyham.base.android.constants.LogLevel
 import com.mattmooneyham.base.android.di.AppComponent
 import com.mattmooneyham.base.android.di.AppConfig
+import com.mattmooneyham.base.android.managers.AndroidConnectivityMonitor
 import dagger.hilt.android.HiltAndroidApp
 
 /**
@@ -24,10 +26,20 @@ class BaseApplication : Application() {
         private set
 
     override fun onCreate() {
+        // This is the Android edge: everything the component needs from
+        // the platform is built HERE as a typed value or boundary, so
+        // the component and managers stay Context-free.
         appComponent = AppComponent(
             AppConfig(
-                appFilesDirectoryPath = filesDir.path,
-                platformContext = this,
+                appFilesDirectory = filesDir,
+                connectivityMonitor = AndroidConnectivityMonitor(this),
+                // Debug builds log everything; release keeps INFO and
+                // above, so trigger traces vanish from production.
+                minimumLogLevel = if (BuildConfig.DEBUG) {
+                    LogLevel.DEBUG
+                } else {
+                    LogLevel.INFO
+                },
             ),
         )
         appComponent.logManager.info(
