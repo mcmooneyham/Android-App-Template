@@ -4,11 +4,6 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -36,23 +31,15 @@ class DataStoreManager(
     private val dataStore: DataStore<Preferences>,
     private val eventManager: EventManager,
     private val logManager: LogManager,
+) : ConfinedManager(
+    managerName = "DataStoreManager",
+    failureLogManager = logManager,
 ) {
 
     companion object {
         private val KEY_HAS_SEEN_WELCOME =
             booleanPreferencesKey("has_seen_welcome")
     }
-
-    // The exception handler is a second line of defense behind the .catch
-    // operators below.
-    private val managerScope = CoroutineScope(
-        SupervisorJob() + Dispatchers.Default +
-            CoroutineExceptionHandler { _, throwable ->
-                logManager.error(
-                    "Unhandled preference failure: ${throwable.message}",
-                )
-            },
-    )
 
     // distinctUntilChanged: DataStore re-emits on EVERY write
     // transaction, so without it an unrelated preference edit would
@@ -80,14 +67,10 @@ class DataStoreManager(
         }
     }
 
-    /**
-     * Stops streaming preference changes onto the event bus. The
-     * DataStore itself runs on the scope its creator owns (see
-     * createDataStoreScope), which the AppComponent cancels separately.
-     */
-    fun close() {
-        managerScope.cancel()
-    }
+    // No close() override needed: the inherited one stops streaming
+    // preference changes onto the bus. The DataStore itself runs on the
+    // scope its creator owns (see createDataStoreScope), which the
+    // AppComponent cancels separately.
 
     // Write failures are logged here rather than surfaced to callers:
     // UI call sites fire-and-forget these writes, so this is the one

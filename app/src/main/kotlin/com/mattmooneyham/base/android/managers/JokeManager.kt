@@ -5,11 +5,6 @@ import com.mattmooneyham.base.android.api.FetchFailure
 import com.mattmooneyham.base.android.api.JokeDto
 import com.mattmooneyham.base.android.api.toFetchFailure
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 // State: the joke feature's whole story in one payload (see JokeState).
@@ -52,23 +47,15 @@ class JokeManager(
     private val apiClient: ApiClient,
     private val logManager: LogManager,
     private val eventManager: EventManager,
+) : ConfinedManager(
+    managerName = "JokeManager",
+    failureLogManager = logManager,
 ) {
 
-    // Never crash the process over a background failure.
-    private val managerScope = CoroutineScope(
-        SupervisorJob() +
-            Dispatchers.Main +
-            CoroutineExceptionHandler { _, throwable ->
-                logManager.error(
-                    "Unhandled joke fetch failure: ${throwable.message}",
-                )
-            },
-    )
-
-    // Both fields are confined to the main dispatcher: refreshJoke is
-    // callable from any thread, so ALL mutable-state access happens
-    // inside managerScope (single-threaded main on both platforms),
-    // making the check-then-set guard atomic between coroutines.
+    // Both fields are confined to the manager's serial dispatcher (see
+    // ConfinedManager): refreshJoke is callable from any thread, so ALL
+    // mutable-state access happens inside managerScope, making the
+    // check-then-set guard atomic between coroutines.
     private var isFetchInFlight = false
     private var latestJoke: JokeDto? = null
 
@@ -110,11 +97,6 @@ class JokeManager(
             isFetchInFlight = false
             publishState(terminalState)
         }
-    }
-
-    /** Cancels any in-flight fetch; a closed manager cannot refresh. */
-    fun close() {
-        managerScope.cancel()
     }
 
     /** Publishes [state] with the retained [latestJoke] attached. */

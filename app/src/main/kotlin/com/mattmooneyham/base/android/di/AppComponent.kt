@@ -104,7 +104,7 @@ class AppComponent(config: SdkConfig) {
         apiClient.httpClient.close()
         dataStoreManager.close()
         dataStoreScope.cancel()
-        networkManager.stopMonitoring()
+        networkManager.close()
         logManager.close()
         eventManager.close()
     }

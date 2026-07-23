@@ -8,12 +8,6 @@ import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Clock
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDateTime
@@ -64,6 +58,12 @@ class LogManager(
     private val minimumLogLevel: LogLevel = LogLevel.DEBUG,
     private val fileLoggingEnabled: Boolean = true,
     private val eventManager: EventManager? = null,
+) : ConfinedManager(
+    managerName = "LogManager",
+    // The logger cannot report its own rails failures through itself
+    // without risking recursion; per-command IO is already guarded with
+    // runCatching, so anything reaching the handler is dropped quietly.
+    failureLogManager = null,
 ) {
 
     private sealed interface LogFileCommand {
@@ -80,32 +80,29 @@ class LogManager(
     private val fileCommands =
         Channel<LogFileCommand>(capacity = WRITER_BUFFER_CAPACITY)
 
-    private val fileWriterScope = CoroutineScope(
-        SupervisorJob() + Dispatchers.IO +
-            CoroutineExceptionHandler { _, _ ->
-                // The writer must never take the app down; individual
-                // commands already guard their own IO with runCatching.
-            },
-    )
-
     private val droppedLineCount = AtomicInt(0)
 
     init {
-        fileWriterScope.launch {
+        // The single writer loop lives on the manager's confinement;
+        // each command's blocking file IO is offloaded with onIo, per
+        // the ConfinedManager rule (state read before, written after).
+        managerScope.launch {
             for (command in fileCommands) {
                 when (command) {
                     is LogFileCommand.Append -> {
                         val droppedLines = droppedLineCount.exchange(0)
-                        if (droppedLines > 0) {
-                            appendToLogFile(
-                                "[LogManager] $droppedLines log line(s) " +
-                                    "dropped under burst",
-                            )
+                        onIo {
+                            if (droppedLines > 0) {
+                                appendToLogFile(
+                                    "[LogManager] $droppedLines log " +
+                                        "line(s) dropped under burst",
+                                )
+                            }
+                            appendToLogFile(command.line)
                         }
-                        appendToLogFile(command.line)
                     }
                     is LogFileCommand.Clear -> {
-                        val cleared = deleteLogFile()
+                        val cleared = onIo { deleteLogFile() }
                         // Announce only after the delete actually ran,
                         // preserving delete-then-announce order; trigger
                         // is thread-safe from the writer.
@@ -174,7 +171,7 @@ class LogManager(
         // file). Falls back to a suspending send only when the buffer
         // is full: Clear must never be dropped.
         if (fileCommands.trySend(LogFileCommand.Clear).isFailure) {
-            fileWriterScope.launch {
+            managerScope.launch {
                 runCatching { fileCommands.send(LogFileCommand.Clear) }
             }
         }
@@ -198,9 +195,9 @@ class LogManager(
      * [flush] first. A closed manager still writes to Logcat, never to
      * the file. Called by the AppComponent's close().
      */
-    fun close() {
+    override fun close() {
         fileCommands.close()
-        fileWriterScope.cancel()
+        super.close()
     }
 
     private fun log(

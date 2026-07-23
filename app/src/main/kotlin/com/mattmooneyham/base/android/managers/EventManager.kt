@@ -42,6 +42,18 @@ import kotlinx.coroutines.launch
  *   that throws is logged loudly and KEPT ALIVE; one bad payload must
  *   not silently kill a screen's subscription.
  *
+ * Ordering contract (the five rules every consumer may rely on):
+ *  1. Delivery order ACROSS different keys is unspecified; never
+ *     assume event A on one key lands before event B on another.
+ *  2. Per-key delivery is in trigger order.
+ *  3. UI listeners always run on the main dispatcher.
+ *  4. A listener never observes a replay older than the latest
+ *     trigger: the replay cache is updated synchronously inside
+ *     trigger, before the call returns.
+ *  5. Triggers are synchronous and never block; under overflow the
+ *     OLDEST buffered event is dropped (latest wins), never the
+ *     caller's thread.
+ *
  * Publishers and subscribers are compile-time typed via [StateKey]'s
  * generic parameter; the runtime [AnyEventKey.payloadType] check guards
  * type-erased paths as a backstop.
@@ -82,6 +94,21 @@ class EventManager {
             },
     )
 
+    // Serial bookkeeping scope: dead-owner sweeps run here, off the
+    // subscribing caller's thread and off Main. The Main dispatcher is
+    // reserved for DELIVERY (rule 3 above); registration housekeeping
+    // no longer rides it.
+    private val busScope = CoroutineScope(
+        SupervisorJob() +
+            Dispatchers.Default.limitedParallelism(1, "EventManagerBus") +
+            CoroutineExceptionHandler { _, throwable ->
+                logManager?.error(
+                    "Event bookkeeping failed: ${throwable.message}",
+                    throwable = throwable,
+                )
+            },
+    )
+
     private var logManager: LogManager? = null
 
     // Streams live HERE, not on the key objects, so no replay cache can
@@ -97,8 +124,11 @@ class EventManager {
 
     // Every live subscription, so dead owners can be swept eagerly on
     // the next registration instead of waiting for their event to fire.
-    // Guarded by its own lock so listenTo and unsubscribeOwner work
-    // synchronously from any thread. Internal for the lifecycle tests.
+    // Guarded by a lock rather than confined to busScope because two
+    // mutations must be SYNCHRONOUS: the append in listenTo (so an
+    // immediate unsubscribeOwner cannot miss it) and unsubscribeOwner
+    // itself (immediate detach is its contract). Sweeps, which have no
+    // urgency, run on busScope. Internal for the lifecycle tests.
     private val registrationsLock = Any()
     internal val registrations = mutableListOf<Registration>()
 
@@ -200,6 +230,7 @@ class EventManager {
      */
     fun close() {
         listenerScope.cancel()
+        busScope.cancel()
         synchronized(registrationsLock) { registrations.clear() }
     }
 
@@ -273,9 +304,20 @@ class EventManager {
                 }
             }
         }
-        // Eager sweep: every registration pays a tiny toll that cancels
-        // collectors whose owners died, bounding leaks by registration
-        // traffic instead of event traffic.
+        // The append is synchronous so an unsubscribeOwner issued right
+        // after listenTo returns is guaranteed to see it.
+        synchronized(registrationsLock) {
+            registrations += Registration(ownerRef, job)
+        }
+        // Eager sweep: every registration schedules a serial busScope
+        // pass that cancels collectors whose owners died, bounding
+        // leaks by registration traffic instead of event traffic
+        // without taxing the subscribing caller.
+        busScope.launch { sweepDeadRegistrations() }
+    }
+
+    /** Drops registrations whose owner died or whose job finished. */
+    private fun sweepDeadRegistrations() {
         val sweptJobs = mutableListOf<Job>()
         synchronized(registrationsLock) {
             registrations.removeAll { registration ->
@@ -284,8 +326,8 @@ class EventManager {
                 if (isStale) sweptJobs += registration.job
                 isStale
             }
-            registrations += Registration(ownerRef, job)
         }
+        // Cancel outside the lock; Job.cancel is thread-safe.
         sweptJobs.forEach { staleJob -> staleJob.cancel() }
     }
 
