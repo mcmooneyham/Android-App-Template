@@ -19,11 +19,11 @@ import kotlinx.coroutines.launch
 /**
  * Central event hub:
  *
- * - One-shot pub/sub keyed by [EventKey] with a typed payload.
- * - For replaying (state) keys, the most recent payload is cached and
- *   replayed to new listeners; a listener only receives a replay if the
- *   event has been triggered at least once. Signal keys
- *   ([AnyEventKey.replays] = false) never replay.
+ * - One-shot pub/sub keyed by [StateKey] (typed payload, replayed) or
+ *   [SignalKey] (payloadless, one-shot).
+ * - For state keys, the most recent payload is cached and replayed to
+ *   new listeners; a listener only receives a replay if the event has
+ *   been triggered at least once. Signal keys never replay.
  * - The manager OWNS every event stream ([flowsByKey]); keys are pure
  *   identifiers. Rebuilding the manager therefore drops all cached
  *   state, and [resetSessionReplayCaches] clears the replay caches of
@@ -41,7 +41,7 @@ import kotlinx.coroutines.launch
  *   that throws is logged loudly and KEPT ALIVE; one bad payload must
  *   not silently kill a screen's subscription.
  *
- * Publishers and subscribers are compile-time typed via [EventKey]'s
+ * Publishers and subscribers are compile-time typed via [StateKey]'s
  * generic parameter; the runtime [AnyEventKey.payloadType] check guards
  * type-erased paths as a backstop.
  *
@@ -118,7 +118,7 @@ class EventManager {
      * type-erased call paths.
      */
     fun <PayloadType : Any> trigger(
-        key: EventKey<PayloadType>,
+        key: StateKey<PayloadType>,
         payload: PayloadType,
     ) {
         publish(key, payload)
@@ -136,7 +136,7 @@ class EventManager {
      * Callbacks run on the main queue and survive their own exceptions.
      */
     fun <PayloadType : Any> listenTo(
-        key: EventKey<PayloadType>,
+        key: StateKey<PayloadType>,
         owner: Any,
         onEvent: (PayloadType) -> Unit,
     ) {

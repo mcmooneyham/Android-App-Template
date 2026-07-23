@@ -11,8 +11,8 @@ import kotlinx.coroutines.flow.asStateFlow
 // State: whether the device has a usable, validated network path.
 // APP lifetime: connectivity is a device fact, not user state, so its
 // cached value survives resetSessionReplayCaches on logout.
-object NetworkConnectivityChanged : EventKey<Boolean>(
-    eventName = "Network Connectivity Changed",
+object NetworkConnectivityChanged : StateKey<Boolean>(
+    eventName = "network.ConnectivityChanged",
     payloadType = Boolean::class,
     lifetime = EventLifetime.APP,
 )

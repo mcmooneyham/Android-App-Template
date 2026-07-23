@@ -28,7 +28,7 @@ import okio.use
 
 // Signal: the log history was cleared. Does not replay, so late
 // subscribers never observe a stale "cleared" notification.
-object LogsCleared : SignalKey(eventName = "Logs Cleared")
+object LogsCleared : SignalKey(eventName = "log.Cleared")
 
 /**
  * Central logging entry point for the SDK and its host apps. Every line

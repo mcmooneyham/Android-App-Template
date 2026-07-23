@@ -15,8 +15,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 // State: the persisted welcome flag; emitted on load and every change.
-object HasSeenWelcomeChanged : EventKey<Boolean>(
-    eventName = "Has Seen Welcome Changed",
+object HasSeenWelcomeChanged : StateKey<Boolean>(
+    eventName = "datastore.HasSeenWelcomeChanged",
     payloadType = Boolean::class,
 )
 

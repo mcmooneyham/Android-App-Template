@@ -12,8 +12,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 // State: the joke feature's whole story in one payload (see JokeState).
-object JokeStateChanged : EventKey<JokeState>(
-    eventName = "Joke State Changed",
+object JokeStateChanged : StateKey<JokeState>(
+    eventName = "joke.StateChanged",
     payloadType = JokeState::class,
 )
 

@@ -19,8 +19,9 @@ Event-driven, managers publish and everything else listens:
     (Preferences DataStore), `JokeManager` (demo REST feature and the
     reference pattern for new features).
   - `constants/`: `BrandColors` semantic tokens and `LogLevel`. Event
-    contracts are typed `EventKey`/`SignalKey` objects declared beside
-    the manager that publishes them.
+    contracts are typed `StateKey`/`SignalKey` objects declared beside
+    the manager that publishes them, with namespaced event names such
+    as `"joke.StateChanged"`.
   - `api/`: Ktor `ApiClient` (base URL in `BaseSdk.API_BASE_URL`) with
     JSON content negotiation; DTOs live beside it.
   - `di/SdkModule`: exposes the singletons to Hilt `@Inject` sites.
@@ -34,7 +35,7 @@ Event-driven, managers publish and everything else listens:
 ## Demo feature pattern
 
 `JokeManager` shows how to add a feature: fetch in the manager, publish
-ONE state event (`JokeStateChanged`, an `EventKey<JokeState>` declared
+ONE state event (`JokeStateChanged`, a `StateKey<JokeState>` declared
 beside the manager), let views listen, and let the viewmodel forward
 user actions. Copy that shape for real features.
 

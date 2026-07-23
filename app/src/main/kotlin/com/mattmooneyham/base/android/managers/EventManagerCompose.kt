@@ -26,7 +26,7 @@ val LocalEventManager = staticCompositionLocalOf<EventManager> {
  */
 @Composable
 inline fun <reified PayloadType : Any> eventState(
-    key: EventKey<PayloadType>,
+    key: StateKey<PayloadType>,
     initialValue: PayloadType,
 ): State<PayloadType> {
     val eventManager = LocalEventManager.current
@@ -45,7 +45,7 @@ inline fun <reified PayloadType : Any> eventState(
  */
 @Composable
 inline fun <reified PayloadType : Any> eventStateOrNull(
-    key: EventKey<PayloadType>,
+    key: StateKey<PayloadType>,
 ): State<PayloadType?> {
     val eventManager = LocalEventManager.current
     val eventFlow = remember(eventManager, key) {
