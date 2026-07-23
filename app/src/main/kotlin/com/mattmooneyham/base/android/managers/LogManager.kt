@@ -1,6 +1,5 @@
 package com.mattmooneyham.base.android.managers
 
-import android.util.Log
 import com.mattmooneyham.base.android.constants.LogLevel
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -287,7 +286,7 @@ class LogManager(
         val logLine = buildLogLine(level, tag, message, callSite)
         // Guarded like the file write: "logging never throws" includes
         // Logcat, whose android.util.Log stub throws in JVM unit tests.
-        runCatching { writePlatformLog(level, tag, logLine, throwable) }
+        runCatching { writeToLogcat(level, tag, logLine, throwable) }
         if (fileLoggingEnabled && logFilePath != null) {
             val enqueued = fileCommands.trySend(
                 LogFileCommand.Append(
@@ -439,21 +438,6 @@ internal data class CallSite(
     val methodName: String?,
     val lineNumber: Int?,
 )
-
-/** Writes one line to Logcat. */
-private fun writePlatformLog(
-    level: LogLevel,
-    tag: String,
-    message: String,
-    throwable: Throwable?,
-) {
-    when (level) {
-        LogLevel.DEBUG -> Log.d(tag, message, throwable)
-        LogLevel.INFO -> Log.i(tag, message, throwable)
-        LogLevel.WARN -> Log.w(tag, message, throwable)
-        LogLevel.ERROR -> Log.e(tag, message, throwable)
-    }
-}
 
 private fun currentCallSite(): CallSite? {
     // Skip every frame belonging to the LogManager itself (including
