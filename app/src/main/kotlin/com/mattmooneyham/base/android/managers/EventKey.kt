@@ -1,35 +1,35 @@
 package com.mattmooneyham.base.android.managers
 
 import kotlin.reflect.KClass
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
+
+/**
+ * How long a key's cached replay value is allowed to live.
+ *
+ * - [APP]: the cached value describes the device or process (e.g.
+ *   connectivity) and survives a session reset.
+ * - [SESSION]: the cached value belongs to the signed-in user or the
+ *   current app session; [EventManager.resetSessionReplayCaches] clears
+ *   it on logout or account switch. This is the safe default.
+ */
+enum class EventLifetime { APP, SESSION }
 
 /**
  * Type-erased base of every event key, used by the untyped APIs
  * ([EventManager.currentValue], [EventManager.eventsOf]). Code should
  * use the typed [EventKey] subclass everywhere.
+ *
+ * A key is a PURE IDENTIFIER: name, payload type, replay behavior, and
+ * lifetime. The event stream itself lives inside [EventManager], keyed
+ * by this object, so rebuilding the manager (tests, account switch)
+ * drops every cached value instead of leaking state through
+ * process-global key objects.
  */
 abstract class AnyEventKey(
     val eventName: String,
     val payloadType: KClass<*>?,
     val replays: Boolean,
-) {
-    // The key OWNS its stream: Kotlin object initialization is
-    // thread-safe and lazy, so each flow is created safely on first
-    // touch with zero locking, preserving trigger's synchronous
-    // any-thread contract.
-    internal val flow = MutableSharedFlow<Any?>(
-        replay = if (replays) 1 else 0,
-        extraBufferCapacity =
-            if (replays) STATE_BUFFER_CAPACITY else SIGNAL_BUFFER_CAPACITY,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
-
-    private companion object {
-        const val STATE_BUFFER_CAPACITY = 16
-        const val SIGNAL_BUFFER_CAPACITY = 64
-    }
-}
+    val lifetime: EventLifetime = EventLifetime.SESSION,
+)
 
 /**
  * A single app event, declared as an `object` next to the manager that
@@ -62,12 +62,18 @@ abstract class AnyEventKey(
  * one-shot signals (see [SignalKey]) are seen only by listeners already
  * subscribed when the event fires. State events are latest-wins under
  * bursts; never use events as lossless data queues.
+ *
+ * [lifetime] defaults to [EventLifetime.SESSION]: the cached replay
+ * value is cleared by [EventManager.resetSessionReplayCaches]. Keys
+ * describing device or process facts (e.g. connectivity) opt into
+ * [EventLifetime.APP] so their cache survives a session reset.
  */
 abstract class EventKey<PayloadType : Any>(
     eventName: String,
     payloadType: KClass<PayloadType>,
     replays: Boolean = true,
-) : AnyEventKey(eventName, payloadType, replays)
+    lifetime: EventLifetime = EventLifetime.SESSION,
+) : AnyEventKey(eventName, payloadType, replays, lifetime)
 
 /**
  * A payloadless one-shot signal (never replayed to late subscribers):
@@ -77,7 +83,16 @@ abstract class EventKey<PayloadType : Any>(
  * eventManager.trigger(LogsCleared)
  * eventManager.listenTo(LogsCleared, owner) { ... }
  * ```
+ *
+ * Fixed at [EventLifetime.APP]: a session reset only clears replay
+ * caches, and signals keep no replay cache, so the tag is moot; APP
+ * states that explicitly.
  */
 abstract class SignalKey(
     eventName: String,
-) : AnyEventKey(eventName, payloadType = null, replays = false)
+) : AnyEventKey(
+    eventName,
+    payloadType = null,
+    replays = false,
+    lifetime = EventLifetime.APP,
+)

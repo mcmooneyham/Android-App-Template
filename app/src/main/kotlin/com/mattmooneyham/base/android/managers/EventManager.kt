@@ -5,10 +5,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
@@ -21,14 +24,19 @@ import kotlinx.coroutines.launch
  *   replayed to new listeners; a listener only receives a replay if the
  *   event has been triggered at least once. Signal keys
  *   ([AnyEventKey.replays] = false) never replay.
+ * - The manager OWNS every event stream ([flowsByKey]); keys are pure
+ *   identifiers. Rebuilding the manager therefore drops all cached
+ *   state, and [resetSessionReplayCaches] clears the replay caches of
+ *   session-lifetime keys in place (logout / account switch).
  * - Listeners are automatically removed when their owner is deallocated
- *   (weak owner tracking). There is DELIBERATELY no removal/unsubscribe
- *   API: the contract is that a subscription lives exactly as long as
- *   its owner, which makes leaks a matter of object lifetime (visible
- *   in a memory profiler) rather than of forgotten remove calls
- *   scattered across screens. Dead
- *   registrations are swept eagerly on every new registration and
- *   pruned on delivery.
+ *   (weak owner tracking). The PRIMARY contract is still that a
+ *   subscription lives exactly as long as its owner, which makes leaks
+ *   a matter of object lifetime (visible in a memory profiler) rather
+ *   than of forgotten remove calls scattered across screens. For
+ *   deterministic teardown (session end, tests) [unsubscribeOwner]
+ *   detaches an owner's subscriptions immediately. Dead registrations
+ *   are additionally swept eagerly on every new registration and pruned
+ *   on delivery.
  * - All listener callbacks are dispatched on the main queue. A listener
  *   that throws is logged loudly and KEPT ALIVE; one bad payload must
  *   not silently kill a screen's subscription.
@@ -75,18 +83,29 @@ class EventManager {
 
     private var logManager: LogManager? = null
 
+    // Streams live HERE, not on the key objects, so no replay cache can
+    // outlive this manager instance. Guarded by a plain monitor lock
+    // rather than a coroutine confinement: trigger() must stay
+    // synchronous and callable from ANY thread, and the critical
+    // section is only a map lookup/insert (tryEmit itself is
+    // thread-safe and happens outside the lock), so a lock is the
+    // simplest correct choice with no dispatcher hop.
+    private val flowsLock = Any()
+    private val flowsByKey =
+        HashMap<AnyEventKey, MutableSharedFlow<Any?>>()
+
     // Every live subscription, so dead owners can be swept eagerly on
     // the next registration instead of waiting for their event to fire.
-    // Mutated ONLY inside listenerScope.launch (single-threaded main),
-    // making it race-free against any-thread listenTo calls. Internal
-    // for the lifecycle tests.
+    // Guarded by its own lock so listenTo and unsubscribeOwner work
+    // synchronously from any thread. Internal for the lifecycle tests.
+    private val registrationsLock = Any()
     internal val registrations = mutableListOf<Registration>()
 
     internal class Registration(val ownerRef: Any, val job: Job)
 
     /**
      * Hooks up trigger tracing and contract-violation reporting. Called
-     * once by BaseSdk.initialize as soon as the LogManager exists (the
+     * once during startup as soon as the LogManager exists (the
      * EventManager is necessarily constructed first).
      */
     fun attachLogManager(logManager: LogManager) {
@@ -133,8 +152,48 @@ class EventManager {
         subscribe(key, owner) { onSignal() }
     }
 
+    /**
+     * Immediately detaches every subscription registered with [owner]
+     * (matched by identity). Unlike the weak-owner sweep, which waits
+     * for garbage collection, this cancels the listeners right away; no
+     * further callbacks are delivered. Use it for deterministic
+     * teardown such as session end.
+     */
+    fun unsubscribeOwner(owner: Any) {
+        val detachedJobs = mutableListOf<Job>()
+        synchronized(registrationsLock) {
+            registrations.removeAll { registration ->
+                val ownsIt = ownerReferent(registration.ownerRef) === owner
+                if (ownsIt) detachedJobs += registration.job
+                ownsIt
+            }
+        }
+        // Cancel outside the lock; Job.cancel is thread-safe.
+        detachedJobs.forEach { job -> job.cancel() }
+    }
+
+    /**
+     * Clears the cached replay value of every SESSION-lifetime key
+     * (see [EventLifetime]), so a new login cannot observe the previous
+     * user's state. APP-lifetime keys (device/process facts such as
+     * connectivity) keep their cache. Subscriptions are untouched: only
+     * replay caches are reset, which is also why [SignalKey] (no replay
+     * cache) is fixed at APP lifetime.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun resetSessionReplayCaches() {
+        synchronized(flowsLock) {
+            for ((key, flow) in flowsByKey) {
+                if (key.lifetime == EventLifetime.SESSION && key.replays) {
+                    flow.resetReplayCache()
+                }
+            }
+        }
+    }
+
     /** Hot stream of [key] payloads; replays the last one if cached. */
-    fun eventsOf(key: AnyEventKey): Flow<Any?> = key.flow.asSharedFlow()
+    fun eventsOf(key: AnyEventKey): Flow<Any?> =
+        flowFor(key).asSharedFlow()
 
     /**
      * Most recent payload for [key], or null if it never fired, fired
@@ -142,21 +201,37 @@ class EventManager {
      * to test occurrence of null-payload replaying keys.
      */
     fun currentValue(key: AnyEventKey): Any? =
-        key.flow.replayCache.firstOrNull()
+        flowFor(key).replayCache.firstOrNull()
 
     /**
      * Whether [key] fired at least once, regardless of payload. Always
      * false for non-replaying signals, which keep no history.
      */
     fun hasFired(key: AnyEventKey): Boolean =
-        key.flow.replayCache.isNotEmpty()
+        flowFor(key).replayCache.isNotEmpty()
+
+    /** The stream for [key], created on first touch. */
+    private fun flowFor(key: AnyEventKey): MutableSharedFlow<Any?> =
+        synchronized(flowsLock) {
+            flowsByKey.getOrPut(key) {
+                MutableSharedFlow(
+                    replay = if (key.replays) 1 else 0,
+                    extraBufferCapacity = if (key.replays) {
+                        STATE_BUFFER_CAPACITY
+                    } else {
+                        SIGNAL_BUFFER_CAPACITY
+                    },
+                    onBufferOverflow = BufferOverflow.DROP_OLDEST,
+                )
+            }
+        }
 
     private fun publish(key: AnyEventKey, payload: Any?) {
         if (!isPayloadValid(key, payload)) return
         logManager?.debug(
             "Triggered '${key.eventName}'${describePayload(payload)}",
         )
-        key.flow.tryEmit(payload)
+        flowFor(key).tryEmit(payload)
     }
 
     private fun subscribe(
@@ -166,7 +241,7 @@ class EventManager {
     ) {
         val ownerRef = createWeakOwnerRef(owner)
         val job = listenerScope.launch {
-            key.flow.collect { payload ->
+            flowFor(key).collect { payload ->
                 if (!isOwnerAlive(ownerRef)) {
                     currentCoroutineContext()[Job]?.cancel()
                     return@collect
@@ -189,15 +264,17 @@ class EventManager {
         // Eager sweep: every registration pays a tiny toll that cancels
         // collectors whose owners died, bounding leaks by registration
         // traffic instead of event traffic.
-        listenerScope.launch {
+        val sweptJobs = mutableListOf<Job>()
+        synchronized(registrationsLock) {
             registrations.removeAll { registration ->
                 val isStale = !isOwnerAlive(registration.ownerRef) ||
                     registration.job.isCompleted
-                if (isStale) registration.job.cancel()
+                if (isStale) sweptJobs += registration.job
                 isStale
             }
             registrations += Registration(ownerRef, job)
         }
+        sweptJobs.forEach { staleJob -> staleJob.cancel() }
     }
 
     private fun isPayloadValid(key: AnyEventKey, payload: Any?): Boolean {
@@ -230,6 +307,11 @@ class EventManager {
         is String -> " (payload: String, ${payload.length} chars)"
         else -> " (payload: ${payload::class.simpleName})"
     }
+
+    private companion object {
+        const val STATE_BUFFER_CAPACITY = 16
+        const val SIGNAL_BUFFER_CAPACITY = 64
+    }
 }
 
 /** Typed event stream; payloads that are not [PayloadType] are dropped. */
@@ -240,7 +322,7 @@ inline fun <reified PayloadType : Any> EventManager.typedEventsOf(
 
 /**
  * Weak reference to a listener's owner, so subscriptions die with their
- * owner. The handle is opaque; only these two functions touch it.
+ * owner. The handle is opaque; only these three functions touch it.
  */
 internal fun createWeakOwnerRef(owner: Any): Any =
     WeakReference(owner)
@@ -248,3 +330,7 @@ internal fun createWeakOwnerRef(owner: Any): Any =
 /** Whether the owner behind [ownerRef] is still alive. */
 internal fun isOwnerAlive(ownerRef: Any): Boolean =
     (ownerRef as WeakReference<*>).get() != null
+
+/** The owner behind [ownerRef], or null if it was collected. */
+internal fun ownerReferent(ownerRef: Any): Any? =
+    (ownerRef as WeakReference<*>).get()
