@@ -1,0 +1,17 @@
+*.iml
+.kotlin
+.gradle
+**/build/
+local.properties
+.idea
+.DS_Store
+captures
+.externalNativeBuild
+.cxx
+
+# iCloud conflict copies ("name 2.ext") appear when a checkout lives in a
+# synced folder and can corrupt builds; never let them into the repo.
+* 2.*
+* 2/
+* 3.*
+* 3/

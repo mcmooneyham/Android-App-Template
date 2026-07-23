@@ -1,0 +1,64 @@
+# Android-App-Template
+
+A standalone, production-shaped Android app template: native Jetpack
+Compose UI on top of an event-driven manager layer. Everything lives in
+one Gradle module and one package tree, so there is nothing to publish,
+version, or wire up before the first build.
+
+## Architecture
+
+Event-driven, managers publish and everything else listens:
+
+- Business-logic layer, side by side with the UI packages:
+  - `BaseSdk`: singleton container; `BaseApplication.onCreate` calls
+    `BaseSdk.initialize(filesDir.path, this)` before anything else runs.
+  - `managers/`: `EventManager` (replay-1 event bus with weak, owner-based
+    listeners plus Compose helpers in `EventManagerCompose.kt`),
+    `LogManager` (Logcat + log file with full call-site context),
+    `NetworkManager` (validated connectivity), `DataStoreManager`
+    (Preferences DataStore), `JokeManager` (demo REST feature and the
+    reference pattern for new features).
+  - `constants/`: `BrandColors` semantic tokens and `LogLevel`. Event
+    contracts are typed `EventKey`/`SignalKey` objects declared beside
+    the manager that publishes them.
+  - `api/`: Ktor `ApiClient` (base URL in `BaseSdk.API_BASE_URL`) with
+    JSON content negotiation; DTOs live beside it.
+  - `di/SdkModule`: exposes the singletons to Hilt `@Inject` sites.
+- UI layer:
+  - `views/` + `views/components/`: pages and reusable components; every
+    composable has a `@Preview`, backed by stateless content composables.
+  - `viewModels/`: thin Hilt viewmodels (writes and actions only; views
+    observe events directly via `eventState`/`eventStateOrNull`).
+  - `animations/AppAnimations.kt`: ALL motion definitions live here.
+
+## Demo feature pattern
+
+`JokeManager` shows how to add a feature: fetch in the manager, publish
+ONE state event (`JokeStateChanged`, an `EventKey<JokeState>` declared
+beside the manager), let views listen, and let the viewmodel forward
+user actions. Copy that shape for real features.
+
+## Stack
+
+Kotlin 2.4.10, AGP 9.0.1 (built-in Kotlin; do NOT apply
+`org.jetbrains.kotlin.android`), Gradle 9.1.0, compileSdk 36, minSdk 32,
+Hilt 2.60.1 + KSP, Compose BOM 2026.06.01, Ktor 3.5.1 (OkHttp engine),
+DataStore 1.2.1, kotlinx-serialization, kotlinx-datetime, okio.
+
+## Build
+
+```
+./gradlew :app:assembleDebug
+```
+
+No external checkouts required; this repo is self-contained.
+
+## Tests
+
+Instrumented flow tests drive the REAL app on a connected device or
+emulator (real Hilt graph, real managers, real DataStore; no mocks
+anywhere):
+
+```
+./gradlew :app:connectedDebugAndroidTest
+```
