@@ -18,26 +18,38 @@ import okio.SYSTEM
 const val DATA_STORE_FILE_NAME = "base_sdk.preferences_pb"
 
 /**
- * Creates the Preferences DataStore backing [DataStoreManager]. DataStore
- * allows only ONE instance per file per process, so this is called
- * exactly once, by BaseSdk.initialize, and cached there.
+ * The scope DataStore runs its IO on. Created by whoever owns the store
+ * (the AppComponent) and cancelled in its close(), so no scope hides
+ * inside the factory where teardown cannot reach it.
  *
- * The explicit scope is load-bearing: DataStore's default scope has no
- * CoroutineExceptionHandler. With the handler, storage failures surface
+ * The explicit CoroutineExceptionHandler is load-bearing: DataStore's
+ * default scope has none. With the handler, storage failures surface
  * to readers as flow errors, which the collectors already catch.
  */
+fun createDataStoreScope(): CoroutineScope = CoroutineScope(
+    SupervisorJob() + Dispatchers.IO +
+        CoroutineExceptionHandler { _, _ ->
+            // Never let a storage failure take down the process.
+        },
+)
+
+/**
+ * Creates the Preferences DataStore backing [DataStoreManager]. DataStore
+ * allows only ONE instance per file per process, so this is called
+ * exactly once per store file, by
+ * [com.mattmooneyham.base.android.di.AppComponent], and cached there.
+ *
+ * @param coroutineScope the store's IO scope (see [createDataStoreScope]);
+ *   the caller keeps it and cancels it on component close.
+ */
 fun createPreferencesDataStore(
+    coroutineScope: CoroutineScope,
     producePath: () -> String,
 ): DataStore<Preferences> =
     PreferenceDataStoreFactory.createWithPath(
         // A corrupt store falls back to defaults instead of failing reads.
         corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
-        scope = CoroutineScope(
-            SupervisorJob() + Dispatchers.IO +
-                CoroutineExceptionHandler { _, _ ->
-                    // Never let a storage failure take down the process.
-                },
-        ),
+        scope = coroutineScope,
         produceFile = {
             val storeFilePath = producePath().toPath()
             // Pre-create an empty store (a valid, empty Preferences file)

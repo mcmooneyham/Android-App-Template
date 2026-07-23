@@ -10,8 +10,13 @@ version, or wire up before the first build.
 Event-driven, managers publish and everything else listens:
 
 - Business-logic layer, side by side with the UI packages:
-  - `BaseSdk`: singleton container; `BaseApplication.onCreate` calls
-    `BaseSdk.initialize(filesDir.path, this)` before anything else runs.
+  - `di/`: `SdkConfig` (the composition root's single input: file
+    paths, log level, API base URL, and an HTTP-client factory seam for
+    tests) and `AppComponent` (manual constructor injection with a
+    reverse-order `close()`); `BaseApplication.onCreate` constructs the
+    single component before anything else runs, and `SdkModule` is a
+    thin Hilt adapter exposing the component's members to `@Inject`
+    sites.
   - `managers/`: `EventManager` (replay-1 event bus with weak, owner-based
     listeners plus Compose helpers in `EventManagerCompose.kt`),
     `LogManager` (Logcat + log file with full call-site context),
@@ -22,9 +27,8 @@ Event-driven, managers publish and everything else listens:
     contracts are typed `StateKey`/`SignalKey` objects declared beside
     the manager that publishes them, with namespaced event names such
     as `"joke.StateChanged"`.
-  - `api/`: Ktor `ApiClient` (base URL in `BaseSdk.API_BASE_URL`) with
+  - `api/`: Ktor `ApiClient` (base URL in `SdkConfig.apiBaseUrl`) with
     JSON content negotiation; DTOs live beside it.
-  - `di/SdkModule`: exposes the singletons to Hilt `@Inject` sites.
 - UI layer:
   - `views/` + `views/components/`: pages and reusable components; every
     composable has a `@Preview`, backed by stateless content composables.
@@ -55,6 +59,13 @@ DataStore 1.2.1, kotlinx-serialization, kotlinx-datetime, okio.
 No external checkouts required; this repo is self-contained.
 
 ## Tests
+
+JVM unit tests (architecture guards today; manager and event-contract
+suites are on the way):
+
+```
+./gradlew :app:testDebugUnitTest
+```
 
 Instrumented flow tests drive the REAL app on a connected device or
 emulator (real Hilt graph, real managers, real DataStore; no mocks

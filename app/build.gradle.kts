@@ -42,6 +42,13 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
+    // JVM unit tests (app/src/test): the architecture guard today; the
+    // manager and event-contract suites arrive with the testing
+    // skeleton. The Ktor MockEngine backs SdkConfig.httpClientFactory.
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.ktor.client.mock)
+
     // Instrumented flow tests drive the REAL app (real Hilt, real
     // managers, real DataStore); no test doubles anywhere.
     androidTestImplementation(platform(libs.compose.bom))

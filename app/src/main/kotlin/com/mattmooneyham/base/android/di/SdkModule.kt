@@ -1,6 +1,7 @@
 package com.mattmooneyham.base.android.di
 
-import com.mattmooneyham.base.android.BaseSdk
+import android.content.Context
+import com.mattmooneyham.base.android.BaseApplication
 import com.mattmooneyham.base.android.api.ApiClient
 import com.mattmooneyham.base.android.managers.DataStoreManager
 import com.mattmooneyham.base.android.managers.EventManager
@@ -10,33 +11,48 @@ import com.mattmooneyham.base.android.managers.NetworkManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 
 /**
- * Exposes the [BaseSdk] singletons to Hilt so app code can @Inject them.
- * No scoping is needed: BaseSdk already holds single instances, wired by
- * BaseSdk.initialize(...), which the app's Application class MUST call in
- * onCreate before any injection resolves these providers.
+ * Thin Hilt adapter over the manual composition root: every provider
+ * reads a member FROM the single [AppComponent] that [BaseApplication]
+ * constructs in onCreate, before any injection resolves. No scoping is
+ * needed; the component already holds single instances, and Hilt never
+ * constructs a manager itself.
  */
 @Module
 @InstallIn(SingletonComponent::class)
 object SdkModule {
 
     @Provides
-    fun provideEventManager(): EventManager = BaseSdk.eventManager
+    fun provideAppComponent(
+        @ApplicationContext applicationContext: Context,
+    ): AppComponent =
+        (applicationContext as BaseApplication).appComponent
 
     @Provides
-    fun provideLogManager(): LogManager = BaseSdk.logManager
+    fun provideEventManager(component: AppComponent): EventManager =
+        component.eventManager
 
     @Provides
-    fun provideNetworkManager(): NetworkManager = BaseSdk.networkManager
+    fun provideLogManager(component: AppComponent): LogManager =
+        component.logManager
 
     @Provides
-    fun provideDataStoreManager(): DataStoreManager = BaseSdk.dataStoreManager
+    fun provideNetworkManager(component: AppComponent): NetworkManager =
+        component.networkManager
 
     @Provides
-    fun provideApiClient(): ApiClient = BaseSdk.apiClient
+    fun provideDataStoreManager(
+        component: AppComponent,
+    ): DataStoreManager = component.dataStoreManager
 
     @Provides
-    fun provideJokeManager(): JokeManager = BaseSdk.jokeManager
+    fun provideApiClient(component: AppComponent): ApiClient =
+        component.apiClient
+
+    @Provides
+    fun provideJokeManager(component: AppComponent): JokeManager =
+        component.jokeManager
 }

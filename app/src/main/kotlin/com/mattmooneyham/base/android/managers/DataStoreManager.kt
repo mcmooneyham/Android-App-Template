@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -24,7 +25,7 @@ object HasSeenWelcomeChanged : StateKey<Boolean>(
  * Typed facade over the shared Preferences DataStore. Each preference is a
  * [Flow] property paired with a suspend setter; add project preferences by
  * following the same pattern. Provided as a singleton via
- * [com.mattmooneyham.base.android.BaseSdk].
+ * [com.mattmooneyham.base.android.di.AppComponent].
  *
  * Event-driven contract: every preference is streamed through
  * [EventManager], so listeners receive the stored value on startup and
@@ -77,6 +78,15 @@ class DataStoreManager(
                     eventManager.trigger(HasSeenWelcomeChanged, hasSeen)
                 }
         }
+    }
+
+    /**
+     * Stops streaming preference changes onto the event bus. The
+     * DataStore itself runs on the scope its creator owns (see
+     * createDataStoreScope), which the AppComponent cancels separately.
+     */
+    fun close() {
+        managerScope.cancel()
     }
 
     // Write failures are logged here rather than surfaced to callers:

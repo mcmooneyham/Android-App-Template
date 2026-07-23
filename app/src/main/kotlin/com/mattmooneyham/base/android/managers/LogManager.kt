@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDateTime
@@ -53,7 +54,8 @@ object LogsCleared : SignalKey(eventName = "log.Cleared")
  * therefore eventually consistent with in-flight lines ([flush] awaits
  * the writer when determinism is needed, e.g. in tests).
  *
- * Provided as a singleton via [com.mattmooneyham.base.android.BaseSdk].
+ * Provided as a singleton via
+ * [com.mattmooneyham.base.android.di.AppComponent].
  */
 @OptIn(ExperimentalAtomicApi::class)
 class LogManager(
@@ -188,6 +190,17 @@ class LogManager(
             fileCommands.send(LogFileCommand.Flush(acknowledgement))
             acknowledgement.await()
         }
+    }
+
+    /**
+     * Stops the file writer for good. Buffered lines may be dropped;
+     * callers that need them persisted (tests, export flows) should
+     * [flush] first. A closed manager still writes to Logcat, never to
+     * the file. Called by the AppComponent's close().
+     */
+    fun close() {
+        fileCommands.close()
+        fileWriterScope.cancel()
     }
 
     private fun log(

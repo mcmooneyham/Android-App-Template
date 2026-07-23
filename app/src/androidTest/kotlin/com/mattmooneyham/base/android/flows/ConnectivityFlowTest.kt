@@ -2,7 +2,6 @@ package com.mattmooneyham.base.android.flows
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import com.mattmooneyham.base.android.MainActivity
-import com.mattmooneyham.base.android.BaseSdk
 import com.mattmooneyham.base.android.managers.NetworkConnectivityChanged
 import org.junit.Rule
 import org.junit.Test
@@ -22,10 +21,10 @@ class ConnectivityFlowTest {
         // The device's real network resolves first.
         composeRule.waitForText("Online")
 
-        BaseSdk.eventManager.trigger(NetworkConnectivityChanged, false)
+        appComponent.eventManager.trigger(NetworkConnectivityChanged, false)
         composeRule.waitForText("Offline")
 
-        BaseSdk.eventManager.trigger(NetworkConnectivityChanged, true)
+        appComponent.eventManager.trigger(NetworkConnectivityChanged, true)
         composeRule.waitForText("Online")
     }
 }

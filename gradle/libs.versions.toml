@@ -26,6 +26,9 @@ kotlinx-serialization = "1.11.0"
 ktor = "3.5.1"
 # Floor set by datastore-preferences-core; used directly for log file IO.
 okio = "3.9.1"
+# JVM unit-test stack (app/src/test), matching the JUnit4 style of the
+# instrumented tests.
+junit = "4.13.2"
 
 [libraries]
 compose-uiTestJunit4 = { module = "androidx.compose.ui:ui-test-junit4" }
@@ -49,6 +52,10 @@ ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "kto
 ktor-client-contentNegotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serialization-kotlinxJson = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
+junit = { module = "junit:junit", version.ref = "junit" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
+# MockEngine backing SdkConfig.httpClientFactory in JVM unit tests.
+ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
 hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "hilt" }
 

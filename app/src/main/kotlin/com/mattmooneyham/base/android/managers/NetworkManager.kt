@@ -21,8 +21,9 @@ object NetworkConnectivityChanged : StateKey<Boolean>(
  * Owns connectivity state for the app: state, events, and logging. The
  * raw ConnectivityManager hookup lives at the bottom of this file.
  *
- * Provided as a singleton via [com.mattmooneyham.base.android.BaseSdk];
- * monitoring starts on construction.
+ * Provided as a singleton via
+ * [com.mattmooneyham.base.android.di.AppComponent]; monitoring starts
+ * on construction.
  *
  * @param platformContext any Context (the application context is used).
  */
@@ -66,8 +67,8 @@ class NetworkManager(
 }
 
 // Raw ConnectivityManager wiring; all state/event behavior lives in
-// NetworkManager above. Module-level state is safe because NetworkManager
-// is a process-wide singleton (BaseSdk).
+// NetworkManager above. Module-level state is safe because the app
+// constructs one NetworkManager per process (one AppComponent).
 private var systemConnectivityManager: ConnectivityManager? = null
 private var activeNetworkCallback: ConnectivityManager.NetworkCallback? = null
 

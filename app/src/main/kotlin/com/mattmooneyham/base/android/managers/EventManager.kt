@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
@@ -189,6 +190,17 @@ class EventManager {
                 }
             }
         }
+    }
+
+    /**
+     * Cancels every listener and stops the bus for good. Called by the
+     * AppComponent's close() as the LAST teardown step, so events that
+     * earlier teardown steps trigger can still deliver. A closed
+     * manager cannot be restarted; construct a new one.
+     */
+    fun close() {
+        listenerScope.cancel()
+        synchronized(registrationsLock) { registrations.clear() }
     }
 
     /** Hot stream of [key] payloads; replays the last one if cached. */

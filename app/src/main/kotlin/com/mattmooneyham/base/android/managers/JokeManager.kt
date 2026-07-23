@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 // State: the joke feature's whole story in one payload (see JokeState).
@@ -109,6 +110,11 @@ class JokeManager(
             isFetchInFlight = false
             publishState(terminalState)
         }
+    }
+
+    /** Cancels any in-flight fetch; a closed manager cannot refresh. */
+    fun close() {
+        managerScope.cancel()
     }
 
     /** Publishes [state] with the retained [latestJoke] attached. */

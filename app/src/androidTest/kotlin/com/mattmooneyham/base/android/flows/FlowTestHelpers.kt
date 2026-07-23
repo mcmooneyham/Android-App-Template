@@ -7,12 +7,26 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.test.platform.app.InstrumentationRegistry
+import com.mattmooneyham.base.android.BaseApplication
+import com.mattmooneyham.base.android.di.AppComponent
 
 // Shared helpers for the instrumented flow tests. These drive the REAL
 // app: real BaseApplication, real Hilt graph, real manager singletons, real
 // DataStore in the app sandbox. Nothing is faked.
 
 const val FLOW_TIMEOUT_MILLIS = 20_000L
+
+/**
+ * The running app's composition root, so tests can drive the SAME
+ * manager instances the UI under test observes.
+ */
+val appComponent: AppComponent
+    get() {
+        val applicationContext = InstrumentationRegistry
+            .getInstrumentation().targetContext.applicationContext
+        return (applicationContext as BaseApplication).appComponent
+    }
 
 /**
  * The bottom bar item for [label]. Matched by Role.Tab so it can never

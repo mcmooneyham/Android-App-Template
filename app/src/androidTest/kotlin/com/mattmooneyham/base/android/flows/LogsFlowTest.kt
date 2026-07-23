@@ -7,7 +7,6 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.mattmooneyham.base.android.MainActivity
-import com.mattmooneyham.base.android.BaseSdk
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -31,9 +30,10 @@ class LogsFlowTest {
 
         // Lay down a distinctive line we can track through the flow.
         val historyMarker = "flow-history-marker-${System.nanoTime()}"
-        BaseSdk.logManager.info(historyMarker)
+        val logManager = appComponent.logManager
+        logManager.info(historyMarker)
         composeRule.waitUntil(FLOW_TIMEOUT_MILLIS) {
-            BaseSdk.logManager.readLogContents().contains(historyMarker)
+            logManager.readLogContents().contains(historyMarker)
         }
 
         // Cancel preserves the history.
@@ -43,7 +43,8 @@ class LogsFlowTest {
         composeRule.waitForTextGone("Clear logs?")
         assertTrue(
             "cancel must not clear the logs",
-            BaseSdk.logManager.readLogContents().contains(historyMarker),
+            appComponent.logManager.readLogContents()
+                .contains(historyMarker),
         )
 
         // Confirm clears it. The dialog's confirm button shares its text
@@ -54,7 +55,8 @@ class LogsFlowTest {
             hasText("Clear logs").and(hasAnyAncestor(isDialog())),
         ).performClick()
         composeRule.waitUntil(FLOW_TIMEOUT_MILLIS) {
-            !BaseSdk.logManager.readLogContents().contains(historyMarker)
+            !appComponent.logManager.readLogContents()
+                .contains(historyMarker)
         }
     }
 }
