@@ -3,6 +3,9 @@ package com.mattmooneyham.base.android.testkit
 import com.mattmooneyham.base.android.constants.LogLevel
 import com.mattmooneyham.base.android.di.AppComponent
 import com.mattmooneyham.base.android.di.AppConfig
+import com.mattmooneyham.base.android.di.CrashReporter
+import com.mattmooneyham.base.android.di.NoOpCrashReporter
+import com.mattmooneyham.base.android.managers.LogManager
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -11,6 +14,7 @@ import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -44,6 +48,8 @@ import kotlinx.serialization.json.Json
 class TestAppContext(
     val jokeApi: FakeJokeApi = FakeJokeApi(),
     minimumLogLevel: LogLevel = LogLevel.DEBUG,
+    crashReporter: CrashReporter = NoOpCrashReporter,
+    maxLogFileSizeBytes: Long = LogManager.DEFAULT_MAX_LOG_FILE_BYTES,
 ) {
 
     val mainDispatcher: TestDispatcher = UnconfinedTestDispatcher()
@@ -61,16 +67,30 @@ class TestAppContext(
     init {
         // Must precede component construction; see the class KDoc.
         Dispatchers.setMain(mainDispatcher)
-        component = AppComponent(
-            AppConfig(
-                appFilesDirectory = filesDirectory,
-                connectivityMonitor = connectivityMonitor,
-                minimumLogLevel = minimumLogLevel,
-                apiBaseUrl = TEST_API_BASE_URL,
-                httpClientFactory = { json -> buildMockHttpClient(json) },
-                clock = clock,
-            ),
-        )
+        try {
+            component = AppComponent(
+                AppConfig(
+                    appFilesDirectory = filesDirectory,
+                    connectivityMonitor = connectivityMonitor,
+                    minimumLogLevel = minimumLogLevel,
+                    apiBaseUrl = TEST_API_BASE_URL,
+                    httpClientFactory = { json ->
+                        buildMockHttpClient(json)
+                    },
+                    clock = clock,
+                    crashReporter = crashReporter,
+                    maxLogFileSizeBytes = maxLogFileSizeBytes,
+                ),
+            )
+        } catch (constructionFailure: Throwable) {
+            // A failed construction must surface as ITSELF: close() is
+            // unreachable on a half-built harness, so undo the Main
+            // override and the temp directory here or they would leak
+            // into every later test in the same JVM.
+            Dispatchers.resetMain()
+            filesDirectory.deleteRecursively()
+            throw constructionFailure
+        }
     }
 
     /** A recorder on this component's event manager. */
@@ -85,9 +105,28 @@ class TestAppContext(
     fun close() {
         if (isClosed) return
         isClosed = true
+        // Quiesce the log writer first: close() cancels scopes without
+        // joining, so an unflushed append could otherwise recreate the
+        // log file between the deletes below.
+        runBlocking { component.logManager.flush() }
         component.close()
         Dispatchers.resetMain()
-        filesDirectory.deleteRecursively()
+        deleteFilesDirectory()
+    }
+
+    /**
+     * Deletes the temp directory, retrying briefly instead of ignoring
+     * the result: one already-claimed log append may still be finishing
+     * on the IO pool and can momentarily recreate the log file.
+     */
+    private fun deleteFilesDirectory() {
+        repeat(DELETE_RETRY_ATTEMPTS) {
+            if (filesDirectory.deleteRecursively()) return
+            Thread.sleep(DELETE_RETRY_DELAY_MILLISECONDS)
+        }
+        check(filesDirectory.deleteRecursively()) {
+            "Could not delete test files directory $filesDirectory"
+        }
     }
 
     /**
@@ -110,5 +149,9 @@ class TestAppContext(
     companion object {
         /** .invalid TLD: guaranteed unresolvable if wiring ever leaks. */
         const val TEST_API_BASE_URL = "https://joke.invalid/"
+
+        // Teardown deletion retry: ample for one in-flight file write.
+        private const val DELETE_RETRY_ATTEMPTS = 10
+        private const val DELETE_RETRY_DELAY_MILLISECONDS = 20L
     }
 }

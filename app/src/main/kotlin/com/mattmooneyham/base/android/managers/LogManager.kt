@@ -217,6 +217,13 @@ class LogManager(
     /**
      * Awaits every file command enqueued before this call. For callers
      * (tests, export flows) that need [readLogContents] to be exact.
+     *
+     * Caveat, shared with [flushForCrash]: a command the background
+     * writer has already CLAIMED from the channel but not yet executed
+     * cannot be awaited, so if a synchronous drain (an ERROR-level
+     * line, [flushForCrash]) steals this call's marker during that
+     * window, the await can complete marginally early. Absent a
+     * concurrent drain, completion is exact.
      */
     suspend fun flush() {
         val acknowledgement = CompletableDeferred<Unit>()
@@ -293,7 +300,10 @@ class LogManager(
             // gap.
             if (enqueued.isFailure) droppedLineCount.fetchAndAdd(1)
             // Flush policy: ERROR lines reach disk before this call
-            // returns (best-effort). Errors precede crashes often
+            // returns. Best-effort: a command the background writer
+            // already claimed (possibly this very line, if the writer
+            // was parked on the channel) is written by the writer
+            // shortly after instead. Errors precede crashes often
             // enough that leaving them queued risks losing exactly the
             // evidence a post-mortem needs.
             if (level == LogLevel.ERROR) drainPendingFileCommands()
@@ -446,16 +456,16 @@ private fun writePlatformLog(
 }
 
 private fun currentCallSite(): CallSite? {
-    // Skip every frame belonging to the LogManager itself (including the
-    // generated file classes for these functions). Matched by EXACT simple
-    // name: a substring check would also skip callers merely named after
-    // it, such as LogManagerTest or a consumer's LogManagerHelper.
+    // Skip every frame belonging to the LogManager itself (including
+    // LogManagerKt, the generated class holding this file's top-level
+    // functions). Matched by EXACT simple name: a substring check would
+    // also skip callers merely named after it, such as LogManagerTest
+    // or a consumer's LogManagerHelper.
     val callerFrame = Throwable().stackTrace.firstOrNull { element ->
         val simpleClassName = element.className
             .substringAfterLast('.').substringBefore('$')
         simpleClassName != "LogManager" &&
-            simpleClassName != "LogManagerKt" &&
-            simpleClassName != "LogManager_androidKt"
+            simpleClassName != "LogManagerKt"
     } ?: return null
 
     // Demangle coroutine/lambda frames: a body launched inside

@@ -54,7 +54,7 @@ ktor-serialization-kotlinxJson = { module = "io.ktor:ktor-serialization-kotlinx-
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 junit = { module = "junit:junit", version.ref = "junit" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
-# MockEngine backing SdkConfig.httpClientFactory in JVM unit tests.
+# MockEngine backing AppConfig.httpClientFactory in JVM unit tests.
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
 hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "hilt" }

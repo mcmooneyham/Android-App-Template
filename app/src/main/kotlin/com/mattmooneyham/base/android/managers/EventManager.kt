@@ -115,9 +115,11 @@ class EventManager {
     // outlive this manager instance. Guarded by a plain monitor lock
     // rather than a coroutine confinement: trigger() must stay
     // synchronous and callable from ANY thread, and the critical
-    // section is only a map lookup/insert (tryEmit itself is
-    // thread-safe and happens outside the lock), so a lock is the
-    // simplest correct choice with no dispatcher hop.
+    // section is only a map lookup/insert plus a never-blocking
+    // tryEmit, so a lock is the simplest correct choice with no
+    // dispatcher hop. Emits stay INSIDE the lock so an in-flight
+    // trigger cannot re-commit a pre-reset payload after
+    // resetSessionReplayCaches cleared its key.
     private val flowsLock = Any()
     private val flowsByKey =
         HashMap<AnyEventKey, MutableSharedFlow<Any?>>()
@@ -274,7 +276,13 @@ class EventManager {
         logManager?.debug(
             "Triggered '${key.eventName}'${describePayload(payload)}",
         )
-        flowFor(key).tryEmit(payload)
+        // Emit under flowsLock (reentrant with flowFor's own hold) so a
+        // trigger racing resetSessionReplayCaches cannot land a
+        // pre-reset payload in a just-cleared replay cache. tryEmit
+        // never blocks under DROP_OLDEST, so the hold stays trivial.
+        synchronized(flowsLock) {
+            flowFor(key).tryEmit(payload)
+        }
     }
 
     private fun subscribe(
