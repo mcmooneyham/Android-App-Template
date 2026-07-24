@@ -1,5 +1,6 @@
-package com.mattmooneyham.base.android.managers
+package com.mattmooneyham.base.android.managers.eventManager
 
+import com.mattmooneyham.base.android.managers.logManager.LogManager
 import java.lang.ref.WeakReference
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
+import kotlin.collections.iterator
 
 /**
  * Central event hub:

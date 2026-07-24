@@ -3,9 +3,9 @@ package com.mattmooneyham.base.android.viewModels
 import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mattmooneyham.base.android.managers.DataStoreManager
+import com.mattmooneyham.base.android.managers.dataStoreManager.DataStoreManager
 import com.mattmooneyham.base.android.managers.JokeManager
-import com.mattmooneyham.base.android.managers.LogManager
+import com.mattmooneyham.base.android.managers.logManager.LogManager
 import com.mattmooneyham.base.android.util.sayHello
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch

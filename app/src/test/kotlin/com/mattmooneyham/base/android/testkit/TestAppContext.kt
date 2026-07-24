@@ -5,7 +5,7 @@ import com.mattmooneyham.base.android.di.AppComponent
 import com.mattmooneyham.base.android.di.AppConfig
 import com.mattmooneyham.base.android.di.CrashReporter
 import com.mattmooneyham.base.android.di.NoOpCrashReporter
-import com.mattmooneyham.base.android.managers.LogManager
+import com.mattmooneyham.base.android.managers.logManager.LogManager
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -50,10 +50,15 @@ class TestAppContext(
     minimumLogLevel: LogLevel = LogLevel.DEBUG,
     crashReporter: CrashReporter = NoOpCrashReporter,
     maxLogFileSizeBytes: Long = LogManager.DEFAULT_MAX_LOG_FILE_BYTES,
+    // Overrides default ON here (unlike production's release default):
+    // specs exercise the debug behavior; pass false to spec the locked
+    // release resolution.
+    featureFlagOverridesEnabled: Boolean = true,
 ) {
 
     val mainDispatcher: TestDispatcher = UnconfinedTestDispatcher()
     val connectivityMonitor = FakeConnectivityMonitor()
+    val flagProvider = FakeFeatureFlagProvider()
     val clock = VirtualClock()
 
     /** Unique per-test files directory (DataStore, log file). */
@@ -73,13 +78,18 @@ class TestAppContext(
                     appFilesDirectory = filesDirectory,
                     connectivityMonitor = connectivityMonitor,
                     minimumLogLevel = minimumLogLevel,
-                    apiBaseUrl = TEST_API_BASE_URL,
+                    // The one HTTP seam: every ApiClient a manager
+                    // builds wraps this client, so ALL requests land
+                    // on the MockEngine whatever their endpoint URL.
                     httpClientFactory = { json ->
                         buildMockHttpClient(json)
                     },
                     clock = clock,
                     crashReporter = crashReporter,
                     maxLogFileSizeBytes = maxLogFileSizeBytes,
+                    featureFlagProvider = flagProvider,
+                    featureFlagOverridesEnabled =
+                        featureFlagOverridesEnabled,
                 ),
             )
         } catch (constructionFailure: Throwable) {
@@ -147,9 +157,6 @@ class TestAppContext(
         }
 
     companion object {
-        /** .invalid TLD: guaranteed unresolvable if wiring ever leaks. */
-        const val TEST_API_BASE_URL = "https://joke.invalid/"
-
         // Teardown deletion retry: ample for one in-flight file write.
         private const val DELETE_RETRY_ATTEMPTS = 10
         private const val DELETE_RETRY_DELAY_MILLISECONDS = 20L

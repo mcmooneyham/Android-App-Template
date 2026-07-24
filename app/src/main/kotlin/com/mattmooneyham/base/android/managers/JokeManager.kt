@@ -4,6 +4,13 @@ import com.mattmooneyham.base.android.api.ApiClient
 import com.mattmooneyham.base.android.api.FetchFailure
 import com.mattmooneyham.base.android.api.JokeDto
 import com.mattmooneyham.base.android.api.toFetchFailure
+import com.mattmooneyham.base.android.managers.connectivityManager.NetworkConnectivityChanged
+import com.mattmooneyham.base.android.managers.eventManager.EventManager
+import com.mattmooneyham.base.android.managers.eventManager.StateKey
+import com.mattmooneyham.base.android.managers.featureFlagManager.BooleanFlag
+import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagManager
+import com.mattmooneyham.base.android.managers.logManager.LogManager
+import io.ktor.client.HttpClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -11,6 +18,17 @@ import kotlinx.coroutines.launch
 object JokeStateChanged : StateKey<JokeState>(
     eventName = "joke.StateChanged",
     payloadType = JokeState::class,
+)
+
+// Flag: gates the reconnect auto-refresh choreography below. Declared
+// beside the consuming feature like an event key, and listed in
+// AppFlags.all (the registry guard test enforces that). OFF by
+// default: enable it remotely via a provider or locally from the
+// Settings > Debug > Feature flags sheet.
+object JokeAutoRetryOnReconnectFlag : BooleanFlag(
+    flagKey = "joke.autoRetryOnReconnect",
+    default = false,
+    description = "Auto-refresh a failed joke when connectivity returns",
 )
 
 /** Phase of the joke fetch lifecycle carried by [JokeState]. */
@@ -44,9 +62,10 @@ data class JokeState(
  * (both keeping the last good joke available).
  *
  * CHOREOGRAPHY EXEMPLAR: this manager also demonstrates the canonical
- * cross-manager pattern by listening to [NetworkConnectivityChanged].
- * When the last fetch FAILED and connectivity transitions from false
- * to true, it auto-refreshes exactly once per failure. The pattern:
+ * cross-manager pattern by listening to [com.mattmooneyham.base.android.managers.connectivityManager.NetworkConnectivityChanged].
+ * When [JokeAutoRetryOnReconnectFlag] is enabled (off by default), the
+ * last fetch FAILED, and connectivity transitions from false to true,
+ * it auto-refreshes exactly once per failure. The pattern:
  * subscribe in init with the manager ITSELF as owner (the subscription
  * then lives exactly as long as the manager), and hop the reaction
  * onto the manager's own confinement before touching mutable state,
@@ -55,13 +74,29 @@ data class JokeState(
  * holds a reference to the other.
  */
 class JokeManager(
-    private val apiClient: ApiClient,
+    httpClient: HttpClient,
     private val logManager: LogManager,
     private val eventManager: EventManager,
+    private val featureFlagManager: FeatureFlagManager,
+    // Test seam only: production wiring always takes the default, so
+    // the endpoint stays this manager's own business. Direct manager
+    // tests may point it at a scripted or local URL.
+    apiBaseUrl: String = JOKE_API_BASE_URL,
 ) : ConfinedManager(
     managerName = "JokeManager",
     failureLogManager = logManager,
 ) {
+
+    // The manager owns its API client: which endpoint to talk to is
+    // this feature's business, not the composition root's. Only the
+    // HttpClient (engine, pools, JSON setup, the test seam) is shared
+    // and component-owned. Managers with their own endpoints each
+    // build their own ApiClient exactly like this; clients are cheap
+    // wrappers, so one per service is the intended shape.
+    private val apiClient = ApiClient(
+        httpClient = httpClient,
+        baseUrl = apiBaseUrl,
+    )
 
     // Both fields are confined to the manager's serial dispatcher (see
     // ConfinedManager): refreshJoke is callable from any thread, so ALL
@@ -102,7 +137,12 @@ class JokeManager(
         val cameBackOnline =
             lastObservedConnectivity == false && isConnected
         lastObservedConnectivity = isConnected
-        if (cameBackOnline && shouldRetryOnReconnect) {
+        // The flag is read at DECISION time (never cached at
+        // construction), so provider updates and debug overrides
+        // apply to the very next transition.
+        if (cameBackOnline && shouldRetryOnReconnect &&
+            featureFlagManager.isEnabled(JokeAutoRetryOnReconnectFlag)
+        ) {
             logManager.info(
                 "Connectivity restored; retrying failed joke fetch",
             )
@@ -159,6 +199,15 @@ class JokeManager(
     /** Publishes [state] with the retained [latestJoke] attached. */
     private fun publishState(state: JokeState) {
         eventManager.trigger(JokeStateChanged, state.copy(joke = latestJoke))
+    }
+
+    companion object {
+        // The Official Joke API: the template's keyless demo endpoint.
+        // A feature manager declares its own endpoint beside itself,
+        // like its event keys; endpoints multiply by adding managers
+        // with their own ApiClients, never by widening a global URL.
+        const val JOKE_API_BASE_URL =
+            "https://official-joke-api.appspot.com/"
     }
 
 }

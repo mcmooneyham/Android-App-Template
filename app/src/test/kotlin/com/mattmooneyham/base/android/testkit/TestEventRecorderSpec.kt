@@ -1,8 +1,8 @@
 package com.mattmooneyham.base.android.testkit
 
-import com.mattmooneyham.base.android.managers.EventManager
-import com.mattmooneyham.base.android.managers.SignalKey
-import com.mattmooneyham.base.android.managers.StateKey
+import com.mattmooneyham.base.android.managers.eventManager.EventManager
+import com.mattmooneyham.base.android.managers.eventManager.SignalKey
+import com.mattmooneyham.base.android.managers.eventManager.StateKey
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi

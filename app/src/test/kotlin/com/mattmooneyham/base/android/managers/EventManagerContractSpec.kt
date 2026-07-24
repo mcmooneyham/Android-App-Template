@@ -1,5 +1,9 @@
 package com.mattmooneyham.base.android.managers
 
+import com.mattmooneyham.base.android.managers.eventManager.EventLifetime
+import com.mattmooneyham.base.android.managers.eventManager.EventManager
+import com.mattmooneyham.base.android.managers.eventManager.SignalKey
+import com.mattmooneyham.base.android.managers.eventManager.StateKey
 import java.lang.ref.Reference
 import java.lang.ref.WeakReference
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +37,7 @@ private object TestCounterChanged : StateKey<Int>(
 private object TestPingFired : SignalKey(eventName = "test.PingFired")
 
 /**
- * Contract tests for the event bus itself, on a bare [EventManager]
+ * Contract tests for the event bus itself, on a bare [com.mattmooneyham.base.android.managers.eventManager.EventManager]
  * (no LogManager attached; tracing is optional by design). Main is an
  * unconfined test dispatcher, so listener delivery happens
  * synchronously within each trigger call and the assertions below can

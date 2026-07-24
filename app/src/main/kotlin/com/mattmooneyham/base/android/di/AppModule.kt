@@ -2,12 +2,12 @@ package com.mattmooneyham.base.android.di
 
 import android.content.Context
 import com.mattmooneyham.base.android.BaseApplication
-import com.mattmooneyham.base.android.api.ApiClient
-import com.mattmooneyham.base.android.managers.DataStoreManager
-import com.mattmooneyham.base.android.managers.EventManager
+import com.mattmooneyham.base.android.managers.dataStoreManager.DataStoreManager
+import com.mattmooneyham.base.android.managers.eventManager.EventManager
+import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagManager
 import com.mattmooneyham.base.android.managers.JokeManager
-import com.mattmooneyham.base.android.managers.LogManager
-import com.mattmooneyham.base.android.managers.NetworkManager
+import com.mattmooneyham.base.android.managers.logManager.LogManager
+import com.mattmooneyham.base.android.managers.connectivityManager.NetworkManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -49,8 +49,12 @@ object AppModule {
     ): DataStoreManager = component.dataStoreManager
 
     @Provides
-    fun provideApiClient(component: AppComponent): ApiClient =
-        component.apiClient
+    fun provideFeatureFlagManager(
+        component: AppComponent,
+    ): FeatureFlagManager = component.featureFlagManager
+
+    // No ApiClient provider: clients are per-endpoint values owned by
+    // their managers (see JokeManager), not shared graph members.
 
     @Provides
     fun provideJokeManager(component: AppComponent): JokeManager =

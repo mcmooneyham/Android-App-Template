@@ -14,8 +14,8 @@ import com.mattmooneyham.base.android.viewModels.SettingsViewModel
 import com.mattmooneyham.base.android.views.BaseAppTheme
 import com.mattmooneyham.base.android.views.NavigationBar
 import com.mattmooneyham.base.android.views.NavigationBarScaffold
-import com.mattmooneyham.base.android.managers.EventManager
-import com.mattmooneyham.base.android.managers.LocalEventManager
+import com.mattmooneyham.base.android.managers.eventManager.EventManager
+import com.mattmooneyham.base.android.managers.eventManager.LocalEventManager
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 

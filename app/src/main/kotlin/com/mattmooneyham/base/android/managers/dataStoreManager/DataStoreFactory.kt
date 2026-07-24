@@ -1,4 +1,4 @@
-package com.mattmooneyham.base.android.managers
+package com.mattmooneyham.base.android.managers.dataStoreManager
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
@@ -9,7 +9,6 @@ import java.io.File
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
 
 // DataStore requires this exact file extension; it is checked at runtime.

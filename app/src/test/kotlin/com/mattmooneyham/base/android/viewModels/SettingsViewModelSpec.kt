@@ -1,8 +1,8 @@
 package com.mattmooneyham.base.android.viewModels
 
 import com.mattmooneyham.base.android.BuildConfig
-import com.mattmooneyham.base.android.managers.HasSeenWelcomeChanged
-import com.mattmooneyham.base.android.managers.LogsCleared
+import com.mattmooneyham.base.android.managers.dataStoreManager.HasSeenWelcomeChanged
+import com.mattmooneyham.base.android.managers.logManager.LogsCleared
 import com.mattmooneyham.base.android.testkit.TestAppContext
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -32,6 +32,7 @@ class SettingsViewModelSpec {
     private fun buildViewModel(app: TestAppContext) = SettingsViewModel(
         dataStoreManager = app.component.dataStoreManager,
         logManager = app.component.logManager,
+        featureFlagManager = app.component.featureFlagManager,
     )
 
     @Test

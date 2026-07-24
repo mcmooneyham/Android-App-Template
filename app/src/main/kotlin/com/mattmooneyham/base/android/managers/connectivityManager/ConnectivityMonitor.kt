@@ -1,4 +1,4 @@
-package com.mattmooneyham.base.android.managers
+package com.mattmooneyham.base.android.managers.connectivityManager
 
 import android.content.Context
 import android.net.ConnectivityManager

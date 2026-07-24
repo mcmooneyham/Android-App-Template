@@ -18,6 +18,8 @@ pays for on every change.
 | Event governance     | the module split, or ~20 event keys         |
 | Lazy startup tiers   | ~15 managers, or measured cold-start cost   |
 | Payload evolution    | day one (rules, not a mechanism)            |
+| Flag vendor adapter  | the first remotely-controlled flag          |
+| Flag experiments     | the first A/B test                          |
 
 Everything below refers to the shipped code by its real names:
 `AppComponent` and `AppConfig` in `di/`, `EventManager` /
@@ -58,7 +60,7 @@ class SessionComponent(
     // (SESSION lifetime by default, which is what makes the reset
     // below correct).
     val syncManager = SyncManager(
-        appComponent.apiClient,
+        appComponent.httpClient,
         appComponent.logManager,
         appComponent.eventManager,
     )
@@ -287,3 +289,73 @@ following them from day one costs nothing.
 5. The eventName string is part of the contract: logs, the future
    generated catalog, and any journaling all key on it. Renaming one
    is a breaking change; use rule 4.
+
+## 7. Feature flag scaling
+
+The shipped system (see the README's "Feature flags" section) is
+deliberately minimal: boolean flags, a no-op provider seam, and
+debug-only persisted overrides, with release builds structurally
+locked to compiled defaults. The designs below extend it.
+
+### Vendor adapter
+
+Adoption threshold: the FIRST flag that must be flipped remotely
+(kill switch, staged rollout). Until then the no-op provider costs
+nothing and the debug overrides cover local development.
+
+The adapter is an edge class implementing `FeatureFlagProvider`,
+built in BaseApplication like AndroidConnectivityMonitor and wired
+through `AppConfig.featureFlagProvider`. Sketch, for Firebase Remote
+Config:
+
+```kotlin
+class FirebaseFeatureFlagProvider : FeatureFlagProvider {
+
+    override fun start(
+        onFlagsUpdated: (Map<String, Boolean>) -> Unit,
+    ) {
+        val remoteConfig = Firebase.remoteConfig
+        // 1. Push the last-fetched values immediately.
+        onFlagsUpdated(remoteConfig.booleanFlagValues())
+        // 2. Re-push after every successful fetch/activate cycle.
+        remoteConfig.addOnConfigUpdateListener(...)
+    }
+
+    override fun stop() { /* remove the listener */ }
+}
+```
+
+The manager needs no changes: providers only ever push full maps.
+NOTE on lifetimes: `FeatureFlagsChanged` ships APP-lifetime because
+the template's layers are device/build facts. A provider that targets
+flags BY USER makes the snapshot user state: flip the key to SESSION
+lifetime and re-resolve after `resetSessionReplayCaches()` during the
+session teardown (section 1).
+
+### Typed variants
+
+Adoption threshold: the first non-boolean remote value (a string
+message, a numeric limit). Add `StringFlag`/`IntFlag` siblings beside
+`BooleanFlag` and widen the provider callback to a
+`Map<String, Any?>`; resolution and precedence stay identical. Resist
+JSON-payload flags until something genuinely structured is needed.
+
+### Experiments and exposure logging
+
+Adoption threshold: the first A/B test. An experiment is a flag plus
+two obligations: STICKINESS (a user must not flap between variants;
+resolve once per session and cache) and EXPOSURE (analytics must know
+when a user actually HIT the gated code path). Add an
+`exposureLogged` wrapper around `isEnabled` that fires an analytics
+event on first read per session, and keep assignment server-side in
+the provider. Do not build this speculatively; it doubles the flag
+system's surface.
+
+### Flag hygiene
+
+Adoption threshold: about 15 flags. Flags are meant to be DELETED:
+each one is a fork in the code that tests must cover twice. Extend
+the registry guard with per-flag metadata (owner, introduced date)
+and fail the build when a flag is older than a chosen ceiling
+(e.g. 180 days) without an explicit `permanent = true` marker, which
+is reserved for true kill switches.

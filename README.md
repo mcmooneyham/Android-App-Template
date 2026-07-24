@@ -28,7 +28,11 @@ AppComponent (di/) .............. plain class, manual constructor
      |-- networkManager ......... validated connectivity, behind the
      |                            ConnectivityMonitor boundary
      |-- dataStoreManager ....... Preferences DataStore facade
-     |-- apiClient .............. Ktor HTTP (httpClientFactory seam)
+     |-- featureFlagManager ..... layered flags: debug override >
+     |                            provider (seam) > compiled default
+     |-- httpClient ............. the ONE shared Ktor engine
+     |                            (httpClientFactory seam); managers
+     |                            wrap it in per-endpoint ApiClients
      |-- jokeManager ............ demo feature + the cross-manager
      |                            choreography exemplar
      v
@@ -51,11 +55,15 @@ viewmodels forward user actions back to managers.
 
 - `AppConfig` gathers everything the component needs from the outside
   world into one value: the files directory (a typed `java.io.File`),
-  the `ConnectivityMonitor` boundary, the minimum log level, the API
-  base URL, an `httpClientFactory: (Json) -> HttpClient` seam (tests
-  swap in a Ktor MockEngine), an injectable `Clock`, a `CrashReporter`
-  seam (no-op by default), and the log-rotation cap. Every field with
-  a production default can be overridden per test.
+  the `ConnectivityMonitor` boundary, the minimum log level, an
+  `httpClientFactory: (Json) -> HttpClient` seam (tests swap in a Ktor
+  MockEngine), an injectable `Clock`, a `CrashReporter` seam (no-op by
+  default), and the log-rotation cap. Every field with a production
+  default can be overridden per test. Endpoint URLs are deliberately
+  NOT here: each manager declares its own base URL beside itself and
+  wraps the shared `httpClient` in its own `ApiClient`, so apps built
+  on the template add services by adding clients, never by widening a
+  global URL.
 - `AppComponent` is a plain class: property initializers run top to
   bottom, so declaration order IS the construction order. It also
   installs a `Thread` default uncaught-exception handler that reports
@@ -108,6 +116,8 @@ declared today:
   `"datastore.HasSeenWelcomeChanged"`, SESSION lifetime, beside
   `DataStoreManager`.
 - `LogsCleared`: `SignalKey`, `"log.Cleared"`, beside `LogManager`.
+- `FeatureFlagsChanged`: `StateKey<FlagSnapshot>`, `"flags.Changed"`,
+  APP lifetime, beside `FeatureFlagManager`.
 
 Keys are PURE IDENTIFIERS; the streams live inside `EventManager`,
 keyed by the key object. Rebuilding the manager (tests, component
@@ -171,9 +181,10 @@ staying peers: it subscribes to `NetworkConnectivityChanged` in its
 init block with the manager ITSELF as owner (the subscription then
 lives exactly as long as the manager), and hops each callback onto its
 own confinement before touching mutable state, because callbacks are
-delivered on Main. Behavior: when the last fetch FAILED and
-connectivity transitions from offline to online, it auto-refreshes
-exactly once per failure. Copy this shape (subscribe in init,
+delivered on Main. Behavior: when `JokeAutoRetryOnReconnectFlag` is
+enabled (off by default) and the last fetch FAILED and connectivity
+transitions from offline to online, it auto-refreshes exactly once
+per failure. Copy this shape (subscribe in init,
 `owner = this`, react on your own confinement) for any manager that
 needs to react to another manager's events.
 
@@ -195,6 +206,34 @@ needs to react to another manager's events.
   (`base-app.log` becomes `base-app.1.log` at the `AppConfig` cap;
   one rotated file is kept).
 
+### Feature flags
+
+Typed boolean flags with three value layers, most specific wins:
+debug override > provider > compiled default.
+
+- A flag is an `object` extending `BooleanFlag`, declared BESIDE the
+  feature that consumes it (like an event key) and listed in
+  `AppFlags.all`; `FeatureFlagRegistryGuardTest` fails the build if a
+  declaration is missing from the registry.
+- `FeatureFlagManager` resolves all layers and publishes every change
+  as `FeatureFlagsChanged` (a full `FlagSnapshot`). Managers read
+  `isEnabled(flag)` synchronously AT DECISION TIME (never cache it at
+  construction); views observe with the one-line `flagState(flag)`
+  composable.
+- `FeatureFlagProvider` (`managers/featureFlagManager/`) is the
+  remote-backend seam, a no-op by default; tests drive a fake by hand
+  (see the deferred vendor-adapter design in ARCHITECTURE-SCALING.md).
+- Overrides are DEBUG ONLY: the "Feature flags" row under Settings >
+  Debug opens a modal sheet listing every declared flag with its live
+  resolved state, the layer that decided it, and a Default/On/Off
+  override control. Overrides persist in a dedicated DataStore file
+  and survive relaunches. Release builds never create that store
+  (`AppConfig.featureFlagOverridesEnabled` is false), so they are
+  structurally locked to defaults plus provider values.
+- `JokeManager` is the live example: `JokeAutoRetryOnReconnectFlag`
+  (off by default) gates the reconnect auto-refresh choreography;
+  enable it from the sheet to watch the choreography run.
+
 ### UI layer
 
 - `views/` + `views/components/`: pages and reusable components; every
@@ -209,12 +248,15 @@ needs to react to another manager's events.
 
 ## Demo feature pattern
 
-`JokeManager` shows how to add a feature: fetch in the manager,
-publish ONE state event (`JokeStateChanged`, a `StateKey<JokeState>`
-declared beside the manager) whose payload carries the whole story
-(REFRESHING, then SUCCESS or FAILED, retaining the last good joke),
-let views listen, and let the viewmodel forward user actions. Copy
-that shape for real features.
+`JokeManager` shows how to add a feature: declare the service's base
+URL beside the manager and wrap the shared `httpClient` in the
+manager's own `ApiClient`, fetch in the manager, publish ONE state
+event (`JokeStateChanged`, a `StateKey<JokeState>` declared beside the
+manager) whose payload carries the whole story (REFRESHING, then
+SUCCESS or FAILED, retaining the last good joke), let views listen,
+and let the viewmodel forward user actions. Copy that shape for real
+features; each new service gets its own per-endpoint `ApiClient` on
+the same shared engine.
 
 ## Stack
 
@@ -250,11 +292,13 @@ fakes only (`app/src/test`):
 - Suites: `EventManagerContractSpec` (validation, replay vs signal,
   session reset, `unsubscribeOwner`, weak-owner sweep),
   `JokeManagerLifecycleSpec`, `DataStoreManagerSpec`,
-  `JokeConnectivityChoreographySpec` (the reconnect auto-refresh),
-  `MainViewModelSpec`, `SettingsViewModelSpec`, plus
-  `CompositionRootGuardTest`, which fails the build if a global
-  container or library-kit terminology ever creeps back into the
-  sources.
+  `JokeConnectivityChoreographySpec` (the reconnect auto-refresh and
+  its flag gate), `FeatureFlagManagerSpec` (layer precedence, live
+  provider updates, override persistence, the release lock),
+  `MainViewModelSpec`, `SettingsViewModelSpec`, plus the guards:
+  `CompositionRootGuardTest` (no global container or library-kit
+  terminology) and `FeatureFlagRegistryGuardTest` (every declared
+  flag is registered).
 
 Instrumented flow tests drive the REAL app on a connected device or
 emulator (real Hilt graph, real managers, real DataStore; no mocks

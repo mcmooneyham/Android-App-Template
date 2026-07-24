@@ -6,10 +6,15 @@ import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 
 /**
- * Thin wrapper around the configured Ktor [HttpClient]. Projects built on
- * this template call it from event-publishing managers; JokeManager is
- * the live example: it fetches with `apiClient.get<JokeDto>("random_joke")`
- * and publishes the result through the EventManager.
+ * Thin per-endpoint wrapper around the shared Ktor [HttpClient]: one
+ * instance binds one service's base URL. A manager that talks to a
+ * remote service constructs its own ApiClient (the endpoint is the
+ * feature's business, declared beside the manager like its event
+ * keys), while the HttpClient itself (engine, connection pools, JSON
+ * setup) stays shared and component-owned; any number of clients can
+ * wrap it. JokeManager is the live example: it fetches with
+ * `apiClient.get<JokeDto>("random_joke")` and publishes the result
+ * through the EventManager.
  */
 class ApiClient(
     val httpClient: HttpClient,

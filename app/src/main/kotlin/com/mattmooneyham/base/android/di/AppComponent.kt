@@ -1,15 +1,17 @@
 package com.mattmooneyham.base.android.di
 
-import com.mattmooneyham.base.android.api.ApiClient
 import com.mattmooneyham.base.android.api.createDefaultJson
-import com.mattmooneyham.base.android.managers.DATA_STORE_FILE_NAME
-import com.mattmooneyham.base.android.managers.DataStoreManager
-import com.mattmooneyham.base.android.managers.EventManager
+import com.mattmooneyham.base.android.managers.dataStoreManager.DATA_STORE_FILE_NAME
+import com.mattmooneyham.base.android.managers.dataStoreManager.DataStoreManager
+import com.mattmooneyham.base.android.managers.eventManager.EventManager
+import com.mattmooneyham.base.android.managers.featureFlagManager.AppFlags
+import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagManager
 import com.mattmooneyham.base.android.managers.JokeManager
-import com.mattmooneyham.base.android.managers.LogManager
-import com.mattmooneyham.base.android.managers.NetworkManager
-import com.mattmooneyham.base.android.managers.createDataStoreScope
-import com.mattmooneyham.base.android.managers.createPreferencesDataStore
+import com.mattmooneyham.base.android.managers.logManager.LogManager
+import com.mattmooneyham.base.android.managers.connectivityManager.NetworkManager
+import com.mattmooneyham.base.android.managers.dataStoreManager.createDataStoreScope
+import com.mattmooneyham.base.android.managers.dataStoreManager.createPreferencesDataStore
+import io.ktor.client.HttpClient
 import java.io.File
 import kotlin.time.TimeSource
 import kotlinx.coroutines.cancel
@@ -77,17 +79,50 @@ class AppComponent(config: AppConfig) {
         logManager = logManager,
     )
 
-    val json: Json = createDefaultJson()
+    // Debug-only flag-override storage: when disabled (release), the
+    // scope and store are never created, so the build is structurally
+    // locked to compiled defaults plus whatever a wired provider
+    // supplies. Its own store file: DataStore allows one instance per
+    // file, and the app's preference store belongs to DataStoreManager.
+    private val flagOverridesScope =
+        if (config.featureFlagOverridesEnabled) {
+            createDataStoreScope()
+        } else {
+            null
+        }
 
-    val apiClient = ApiClient(
-        httpClient = config.httpClientFactory(json),
-        baseUrl = config.apiBaseUrl,
+    val featureFlagManager = FeatureFlagManager(
+        flags = AppFlags.all,
+        overridesStore = flagOverridesScope?.let { overridesScope ->
+            createPreferencesDataStore(
+                coroutineScope = overridesScope,
+                produceFile = {
+                    File(
+                        config.appFilesDirectory,
+                        FeatureFlagManager.FLAG_OVERRIDES_FILE_NAME,
+                    )
+                },
+            )
+        },
+        provider = config.featureFlagProvider,
+        eventManager = eventManager,
+        logManager = logManager,
     )
 
+    val json: Json = createDefaultJson()
+
+    // The ONE shared HTTP engine (connection pools, JSON negotiation,
+    // and the httpClientFactory test seam). Managers wrap it in their
+    // own per-endpoint ApiClients (see JokeManager for the pattern);
+    // the component owns the engine so close() shuts it down once,
+    // however many clients wrap it.
+    val httpClient: HttpClient = config.httpClientFactory(json)
+
     val jokeManager = JokeManager(
-        apiClient = apiClient,
+        httpClient = httpClient,
         logManager = logManager,
         eventManager = eventManager,
+        featureFlagManager = featureFlagManager,
     )
 
     // Crash safety: the handler below chains in FRONT of whatever was
@@ -140,7 +175,9 @@ class AppComponent(config: AppConfig) {
             )
         }
         jokeManager.close()
-        apiClient.httpClient.close()
+        httpClient.close()
+        featureFlagManager.close()
+        flagOverridesScope?.cancel()
         dataStoreManager.close()
         dataStoreScope.cancel()
         networkManager.close()

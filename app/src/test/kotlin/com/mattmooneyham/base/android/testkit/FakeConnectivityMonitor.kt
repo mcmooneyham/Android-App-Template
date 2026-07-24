@@ -1,6 +1,6 @@
 package com.mattmooneyham.base.android.testkit
 
-import com.mattmooneyham.base.android.managers.ConnectivityMonitor
+import com.mattmooneyham.base.android.managers.connectivityManager.ConnectivityMonitor
 
 /**
  * Test double for the connectivity boundary. NetworkManager starts it

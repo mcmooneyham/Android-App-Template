@@ -1,5 +1,7 @@
 package com.mattmooneyham.base.android.managers
 
+import com.mattmooneyham.base.android.managers.dataStoreManager.DATA_STORE_FILE_NAME
+import com.mattmooneyham.base.android.managers.dataStoreManager.HasSeenWelcomeChanged
 import com.mattmooneyham.base.android.testkit.TestAppContext
 import java.io.File
 import kotlinx.coroutines.flow.first
@@ -13,7 +15,7 @@ import org.junit.Test
  * DataStoreManager against the REAL Preferences DataStore, backed by
  * the harness's per-test temporary directory: writes round-trip
  * through the actual store file and every value change reaches the
- * bus as a [HasSeenWelcomeChanged] event.
+ * bus as a [com.mattmooneyham.base.android.managers.dataStoreManager.HasSeenWelcomeChanged] event.
  */
 class DataStoreManagerSpec {
 

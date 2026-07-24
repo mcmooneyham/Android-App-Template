@@ -27,12 +27,12 @@ import com.mattmooneyham.base.android.views.components.JokeCard
 import com.mattmooneyham.base.android.views.components.SettingsGroupCard
 import com.mattmooneyham.base.android.views.components.SettingsRow
 import com.mattmooneyham.base.android.api.FailureKind
-import com.mattmooneyham.base.android.managers.HasSeenWelcomeChanged
+import com.mattmooneyham.base.android.managers.dataStoreManager.HasSeenWelcomeChanged
 import com.mattmooneyham.base.android.managers.JokeStateChanged
 import com.mattmooneyham.base.android.managers.JokeStatus
-import com.mattmooneyham.base.android.managers.NetworkConnectivityChanged
-import com.mattmooneyham.base.android.managers.eventState
-import com.mattmooneyham.base.android.managers.eventStateOrNull
+import com.mattmooneyham.base.android.managers.connectivityManager.NetworkConnectivityChanged
+import com.mattmooneyham.base.android.managers.eventManager.eventState
+import com.mattmooneyham.base.android.managers.eventManager.eventStateOrNull
 
 /**
  * Home tab. Simple event-backed values are observed straight from the

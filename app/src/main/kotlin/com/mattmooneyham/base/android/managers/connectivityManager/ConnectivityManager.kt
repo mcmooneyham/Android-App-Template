@@ -1,5 +1,10 @@
-package com.mattmooneyham.base.android.managers
+package com.mattmooneyham.base.android.managers.connectivityManager
 
+import com.mattmooneyham.base.android.managers.ConfinedManager
+import com.mattmooneyham.base.android.managers.eventManager.EventLifetime
+import com.mattmooneyham.base.android.managers.eventManager.EventManager
+import com.mattmooneyham.base.android.managers.eventManager.StateKey
+import com.mattmooneyham.base.android.managers.logManager.LogManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

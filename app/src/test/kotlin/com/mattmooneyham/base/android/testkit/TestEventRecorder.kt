@@ -1,9 +1,9 @@
 package com.mattmooneyham.base.android.testkit
 
-import com.mattmooneyham.base.android.managers.AnyEventKey
-import com.mattmooneyham.base.android.managers.EventManager
-import com.mattmooneyham.base.android.managers.SignalKey
-import com.mattmooneyham.base.android.managers.StateKey
+import com.mattmooneyham.base.android.managers.eventManager.AnyEventKey
+import com.mattmooneyham.base.android.managers.eventManager.EventManager
+import com.mattmooneyham.base.android.managers.eventManager.SignalKey
+import com.mattmooneyham.base.android.managers.eventManager.StateKey
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration

@@ -1,6 +1,9 @@
-package com.mattmooneyham.base.android.managers
+package com.mattmooneyham.base.android.managers.logManager
 
 import com.mattmooneyham.base.android.constants.LogLevel
+import com.mattmooneyham.base.android.managers.ConfinedManager
+import com.mattmooneyham.base.android.managers.eventManager.EventManager
+import com.mattmooneyham.base.android.managers.eventManager.SignalKey
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Clock
@@ -14,7 +17,6 @@ import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
 import okio.FileSystem
 import okio.Path.Companion.toPath
-import okio.SYSTEM
 import okio.buffer
 import okio.use
 

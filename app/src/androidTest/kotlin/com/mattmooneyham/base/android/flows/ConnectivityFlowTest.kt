@@ -2,7 +2,7 @@ package com.mattmooneyham.base.android.flows
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import com.mattmooneyham.base.android.MainActivity
-import com.mattmooneyham.base.android.managers.NetworkConnectivityChanged
+import com.mattmooneyham.base.android.managers.connectivityManager.NetworkConnectivityChanged
 import org.junit.Rule
 import org.junit.Test
 

@@ -1,6 +1,6 @@
 package com.mattmooneyham.base.android.viewModels
 
-import com.mattmooneyham.base.android.managers.HasSeenWelcomeChanged
+import com.mattmooneyham.base.android.managers.dataStoreManager.HasSeenWelcomeChanged
 import com.mattmooneyham.base.android.managers.JokeStateChanged
 import com.mattmooneyham.base.android.managers.JokeStatus
 import com.mattmooneyham.base.android.testkit.TestAppContext

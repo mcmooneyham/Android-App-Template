@@ -1,5 +1,6 @@
 package com.mattmooneyham.base.android.managers
 
+import com.mattmooneyham.base.android.managers.logManager.LogManager
 import com.mattmooneyham.base.android.testkit.FakeCrashReporter
 import com.mattmooneyham.base.android.testkit.TestAppContext
 import java.io.File

@@ -2,8 +2,10 @@ package com.mattmooneyham.base.android.di
 
 import com.mattmooneyham.base.android.api.createHttpClient
 import com.mattmooneyham.base.android.constants.LogLevel
-import com.mattmooneyham.base.android.managers.ConnectivityMonitor
-import com.mattmooneyham.base.android.managers.LogManager
+import com.mattmooneyham.base.android.managers.connectivityManager.ConnectivityMonitor
+import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagProvider
+import com.mattmooneyham.base.android.managers.featureFlagManager.NoOpFeatureFlagProvider
+import com.mattmooneyham.base.android.managers.logManager.LogManager
 import io.ktor.client.HttpClient
 import java.io.File
 import kotlin.time.Clock
@@ -29,33 +31,35 @@ import kotlinx.serialization.json.Json
  * @param minimumLogLevel lowest level that gets logged. The default is
  *   INFO (safe for release); BaseApplication passes DEBUG in debug
  *   builds, so trigger traces vanish from production.
- * @param apiBaseUrl base URL every ApiClient request resolves against.
- * @param httpClientFactory builds the shared HTTP client from the
+ * @param httpClientFactory builds the ONE shared HTTP client from the
  *   shared [Json]; the default picks the bundled OkHttp engine, tests
- *   substitute a MockEngine here.
+ *   substitute a MockEngine here. Endpoints are NOT configured here:
+ *   each manager declares its own base URL beside itself and wraps
+ *   this shared client in its own per-endpoint ApiClient (see
+ *   JokeManager).
  * @param clock source of wall time (log timestamps); tests pin it.
  * @param crashReporter crash backend seam (Crashlytics, Sentry, ...);
  *   the AppComponent's uncaught-exception handler reports fatals to
  *   it. Defaults to a no-op.
  * @param maxLogFileSizeBytes size at which the log file rotates to
  *   its single ".1" history file.
+ * @param featureFlagProvider remote flag backend seam; the no-op
+ *   default supplies nothing, so compiled defaults (and debug
+ *   overrides) decide every flag.
+ * @param featureFlagOverridesEnabled whether local flag overrides are
+ *   available and persisted. BaseApplication passes BuildConfig.DEBUG:
+ *   release builds never create the override store, so they stay
+ *   locked to default/provider values. Defaults to false so the lock
+ *   is opt-out.
  */
 data class AppConfig(
     val appFilesDirectory: File,
     val connectivityMonitor: ConnectivityMonitor,
     val minimumLogLevel: LogLevel = LogLevel.INFO,
-    val apiBaseUrl: String = DEFAULT_API_BASE_URL,
     val httpClientFactory: (Json) -> HttpClient = ::createHttpClient,
     val clock: Clock = Clock.System,
     val crashReporter: CrashReporter = NoOpCrashReporter,
     val maxLogFileSizeBytes: Long = LogManager.DEFAULT_MAX_LOG_FILE_BYTES,
-) {
-
-    companion object {
-        // The Official Joke API powers the template's demo request (see
-        // JokeManager). Replace with the real service's base URL when
-        // building on the template.
-        const val DEFAULT_API_BASE_URL =
-            "https://official-joke-api.appspot.com/"
-    }
-}
+    val featureFlagProvider: FeatureFlagProvider = NoOpFeatureFlagProvider,
+    val featureFlagOverridesEnabled: Boolean = false,
+)

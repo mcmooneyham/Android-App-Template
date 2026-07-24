@@ -4,7 +4,7 @@ import android.app.Application
 import com.mattmooneyham.base.android.constants.LogLevel
 import com.mattmooneyham.base.android.di.AppComponent
 import com.mattmooneyham.base.android.di.AppConfig
-import com.mattmooneyham.base.android.managers.AndroidConnectivityMonitor
+import com.mattmooneyham.base.android.managers.connectivityManager.AndroidConnectivityMonitor
 import dagger.hilt.android.HiltAndroidApp
 
 /**
@@ -40,6 +40,10 @@ class BaseApplication : Application() {
                 } else {
                     LogLevel.INFO
                 },
+                // Debug builds persist local flag overrides (Settings >
+                // Debug); release builds never create the override
+                // store, locking flags to their compiled defaults.
+                featureFlagOverridesEnabled = BuildConfig.DEBUG,
             ),
         )
         appComponent.logManager.info(

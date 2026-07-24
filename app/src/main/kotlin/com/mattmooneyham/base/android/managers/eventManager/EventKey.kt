@@ -1,4 +1,4 @@
-package com.mattmooneyham.base.android.managers
+package com.mattmooneyham.base.android.managers.eventManager
 
 import kotlin.reflect.KClass
 

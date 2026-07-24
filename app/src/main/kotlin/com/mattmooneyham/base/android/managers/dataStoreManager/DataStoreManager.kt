@@ -1,9 +1,13 @@
-package com.mattmooneyham.base.android.managers
+package com.mattmooneyham.base.android.managers.dataStoreManager
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import com.mattmooneyham.base.android.managers.ConfinedManager
+import com.mattmooneyham.base.android.managers.eventManager.EventManager
+import com.mattmooneyham.base.android.managers.eventManager.StateKey
+import com.mattmooneyham.base.android.managers.logManager.LogManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
