@@ -48,11 +48,6 @@ import com.mattmooneyham.base.android.constants.BrandColors
 // The joke feature's accent is the brand MAGIC purple, giving the card
 // its own identity next to the BRAND-blue chrome.
 private val JokeAccent = Color(BrandColors.MAGIC)
-private val RefreshTint = Color(BrandColors.BRAND)
-
-// Height of one skeleton placeholder line; AppShapes.skeletonLine's
-// radius is half of it, keeping the line fully pill-ended.
-private val SkeletonLineHeight = 14.dp
 
 /**
  * Demo REST card: an icon-tile header matching the SettingsRow language,
@@ -73,6 +68,7 @@ fun JokeCard(
     // instrumented suite's stable handle for that tap.
     onOpenDetails: (() -> Unit)? = null,
 ) {
+    val refreshTint = MaterialTheme.colorScheme.primary
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = AppShapes.card,
@@ -128,14 +124,14 @@ fun JokeCard(
                     modifier = Modifier
                         .size(AppDimens.actionSlotSize)
                         .background(
-                            color = RefreshTint.copy(alpha = 0.12f),
+                            color = refreshTint.copy(alpha = 0.12f),
                             shape = CircleShape,
                         ),
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(
-                            color = RefreshTint,
-                            strokeWidth = 2.dp,
+                            color = refreshTint,
+                            strokeWidth = AppDimens.spinnerStrokeWidth,
                             modifier = Modifier.size(AppDimens.iconMedium),
                         )
                     } else {
@@ -146,7 +142,7 @@ fun JokeCard(
                                     R.string
                                         .joke_card_refresh_content_description,
                                 ),
-                                tint = RefreshTint,
+                                tint = refreshTint,
                                 modifier = Modifier
                                     .size(AppDimens.iconLarge),
                             )
@@ -181,7 +177,7 @@ fun JokeCard(
                         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
                             Box(
                                 modifier = Modifier
-                                    .width(3.dp)
+                                    .width(AppDimens.accentBarWidth)
                                     .fillMaxHeight()
                                     .background(
                                         color = JokeAccent.copy(alpha = 0.5f),
@@ -249,7 +245,7 @@ internal fun SkeletonLine(widthFraction: Float) {
     Box(
         modifier = Modifier
             .fillMaxWidth(widthFraction)
-            .height(SkeletonLineHeight)
+            .height(AppDimens.skeletonLineHeight)
             .background(
                 color = MaterialTheme.colorScheme.outlineVariant,
                 shape = AppShapes.skeletonLine,

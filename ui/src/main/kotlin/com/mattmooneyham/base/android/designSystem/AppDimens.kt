@@ -26,12 +26,30 @@ object AppDimens {
      * sized so the swap never shifts layout. */
     val actionSlotSize: Dp = 40.dp
 
-    /** Start inset that aligns a divider with a row's text column
-     * (past the icon tile and its gap). */
-    val dividerInset: Dp = 68.dp
+    /** Start inset that aligns a divider with a row's text column.
+     * DERIVED from the row's actual anatomy (edge padding + tile +
+     * text gap), so retuning any part keeps dividers aligned. */
+    val dividerInset: Dp =
+        AppSpacing.lg + iconTileSize + AppSpacing.contentGapLarge
 
     /** Hairline separators (the tab bar's top divider). */
     val hairline: Dp = 0.5.dp
+
+    /** Small circular status dots (hero card, status chips). */
+    val statusDotSize: Dp = 8.dp
+
+    /** Grouped-card shadow elevation. */
+    val cardElevation: Dp = 1.dp
+
+    /** Skeleton placeholder line height (pairs with
+     * AppShapes.skeletonLine's half-height radius). */
+    val skeletonLineHeight: Dp = 14.dp
+
+    /** Progress spinner stroke. */
+    val spinnerStrokeWidth: Dp = 2.dp
+
+    /** Slim vertical accent bars (the punchline quote bar). */
+    val accentBarWidth: Dp = 3.dp
 
     /** The iOS-style tab bar's metric block. */
     object TabBar {

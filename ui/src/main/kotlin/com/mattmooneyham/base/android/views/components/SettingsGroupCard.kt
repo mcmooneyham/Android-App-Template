@@ -9,7 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
+import com.mattmooneyham.base.android.designSystem.AppDimens
 import com.mattmooneyham.base.android.designSystem.AppShapes
 import com.mattmooneyham.base.android.views.BaseAppTheme
 
@@ -25,7 +25,7 @@ fun SettingsGroupCard(
     Surface(
         shape = AppShapes.card,
         color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 1.dp,
+        shadowElevation = AppDimens.cardElevation,
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(content = content)

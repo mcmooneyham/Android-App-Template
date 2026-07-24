@@ -168,6 +168,27 @@ class EventManagerContractSpec {
     }
 
     @Test
+    fun `a throwing listener is kept alive for later deliveries`() {
+        var deliveryCount = 0
+        val listenerOwner = Any()
+        eventManager.listenTo(TestGreetingChanged, listenerOwner) {
+            deliveryCount += 1
+            if (deliveryCount == 1) {
+                throw IllegalStateException("bad payload handler")
+            }
+        }
+
+        eventManager.trigger(TestGreetingChanged, "first")
+        eventManager.trigger(TestGreetingChanged, "second")
+
+        // The KEPT ALIVE half of the throwing-listener rule: the first
+        // delivery's throw is caught inside collect, so the second
+        // delivery still arrives on the same subscription.
+        assertEquals(2, deliveryCount)
+        Reference.reachabilityFence(listenerOwner)
+    }
+
+    @Test
     fun `a signal subscription is live before listenTo returns`() {
         // A QUEUEING Main (unlike the unconfined harness above) leaves
         // everything posted to Main unexecuted until runCurrent: the

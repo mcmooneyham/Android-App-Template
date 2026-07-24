@@ -10,15 +10,15 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import com.mattmooneyham.base.android.viewModels.MainViewModel
 import com.mattmooneyham.base.android.viewModels.SettingsViewModel
+import com.mattmooneyham.base.android.views.AppShell
 import com.mattmooneyham.base.android.views.BaseAppTheme
 import com.mattmooneyham.base.android.views.LocalEventManager
-import com.mattmooneyham.base.android.views.NavigationBar
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
 // The activity's shell preview lives with the scaffold in :ui
-// (NavigationBarScaffoldPreview); this file holds no composables of
+// (AppShellScaffoldPreview); this file holds no composables of
 // its own.
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -59,7 +59,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             CompositionLocalProvider(LocalEventManager provides eventManager) {
                 BaseAppTheme {
-                    NavigationBar(
+                    AppShell(
                         mainViewModel = mainViewModel,
                         settingsViewModel = settingsViewModel,
                         pendingDeepLinkUrl = pendingDeepLinkUrl.value,

@@ -185,10 +185,12 @@ The contract every publisher and subscriber can rely on:
   attach asynchronously; replay makes that harmless).
 - A listener that throws is logged loudly and KEPT ALIVE; one bad
   payload must not silently kill a screen's subscription.
-- Every trigger passes one breadcrumb choke point: it always reaches
-  the crash report's breadcrumb ring, and lands in the log file as a
-  DEBUG line only when the minimum level admits it (debug builds), so
-  the whole app's event traffic is greppable there.
+- Every DELIVERED trigger passes one breadcrumb choke point into the
+  crash report's breadcrumb ring; suppressed duplicates leave only a
+  debug trace, and rejected payloads log at ERROR (so they reach the
+  telemetry funnel as non-fatals). Breadcrumbed events also land in
+  the log file as DEBUG lines when the minimum level admits it (debug
+  builds), so the app's delivered event traffic is greppable there.
 
 Latest-wins replay means events are projections of state, never a
 lossless work queue. Work that must not be lost belongs in a durable
@@ -272,9 +274,10 @@ needs to react to another manager's events.
   component's handler calls `recordFatal`; everything else funnels
   through the LogManager: every accepted ERROR line becomes a
   `recordNonFatal` (the attached throwable, or a call-site-stamped
-  `LoggedError`), and every bus trigger plus every WARN/ERROR line
-  becomes a `recordBreadcrumb`, so release crash reports carry the
-  recent app history even though DEBUG traces stay out of the file.
+  `LoggedError`), and every delivered bus trigger plus every
+  WARN/ERROR line becomes a `recordBreadcrumb`, so release crash
+  reports carry the recent app history even though DEBUG traces stay
+  out of the file.
 - `LogManager` writes through a bounded single-writer channel so
   logging never does IO on the calling thread, with two crash-forensic
   exceptions: ERROR-level lines drain the queue synchronously before

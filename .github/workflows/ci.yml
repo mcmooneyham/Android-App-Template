@@ -1,13 +1,15 @@
-# The CI gate, on every push and pull request: every module builds
-# and unit-tests (including :templates, which nothing depends on, so
-# CI is what keeps the exemplars honest), plus the R8 release build
-# and lint. The emulator UI-flow job is gated: flip
-# RUN_UI_TESTS_BY_DEFAULT below (or dispatch the workflow manually
-# with the input) to control whether it runs.
+# The CI gate, on pushes to main and every pull request (PR commits
+# run once, not once per trigger): every module builds and
+# unit-tests (including :templates, which nothing depends on, so CI
+# is what keeps the exemplars honest), plus the R8 release build and
+# lint. The emulator UI-flow job is gated: a manual dispatch honors
+# the run_ui_tests input verbatim; every other event uses the
+# RUN_UI_TESTS_BY_DEFAULT value set below.
 name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -31,10 +33,17 @@ jobs:
     outputs:
       run_ui_tests: ${{ steps.resolve.outputs.run_ui_tests }}
     steps:
+      # A boolean input can be false, so an || fallback expression
+      # would silently swallow an explicit "off" dispatch.
       - id: resolve
-        run: >
-          echo "run_ui_tests=${{ inputs.run_ui_tests
-          || env.RUN_UI_TESTS_BY_DEFAULT }}" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run_ui_tests=${{ inputs.run_ui_tests }}" \
+              >> "$GITHUB_OUTPUT"
+          else
+            echo "run_ui_tests=${RUN_UI_TESTS_BY_DEFAULT}" \
+              >> "$GITHUB_OUTPUT"
+          fi
 
   build:
     name: Build, unit tests, lint
@@ -64,6 +73,7 @@ jobs:
           :app:compileDebugAndroidTestKotlin
           :templates:compileDebugAndroidTestKotlin
           :app:lintDebug
+          :templates:lintDebug
 
       - name: Upload reports on failure
         if: failure()

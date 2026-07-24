@@ -180,7 +180,6 @@ class FeatureFlagManager(
         }
     }
 
-    /** First failure per outage at ERROR, repeats at WARN. */
     /** Stops the provider, then cancels the manager's coroutines. */
     override fun close() {
         provider.stop()

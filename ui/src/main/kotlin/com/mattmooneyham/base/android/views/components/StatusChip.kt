@@ -15,10 +15,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import com.mattmooneyham.base.android.views.BaseAppTheme
 import com.mattmooneyham.base.android.animations.AppAnimations
 import com.mattmooneyham.base.android.constants.BrandColors
+import com.mattmooneyham.base.android.designSystem.AppDimens
 import com.mattmooneyham.base.android.designSystem.AppSpacing
 
 /**
@@ -55,7 +55,7 @@ fun StatusChip(
     ) {
         Box(
             modifier = Modifier
-                .size(8.dp)
+                .size(AppDimens.statusDotSize)
                 .background(color = statusColor, shape = CircleShape),
         )
         Text(

@@ -29,15 +29,17 @@ object HasSeenWelcomeChanged : StateKey<Boolean>(
 )
 
 /**
- * Typed facade over the shared Preferences DataStore. Each preference is a
- * [Flow] property paired with a suspend setter; add project preferences by
- * following the same pattern. Provided as a singleton via AppComponent
- * (in :app).
+ * Typed facade over the shared Preferences DataStore. Each preference
+ * follows one pattern: a bus key (here [HasSeenWelcomeChanged]) is the
+ * ONE observation surface, a private [Flow] is only the bridge input
+ * feeding it, and a suspend setter is the write path. Add project
+ * preferences by following the same pattern. Provided as a singleton
+ * via AppComponent (in :app).
  *
  * Event-driven contract: every preference is streamed through
  * [EventManager], so listeners receive the stored value on startup and
- * again on every change; suspend setters are the write path. Every write
- * and every stream failure is logged with full call-site context.
+ * again on every change. Every write and every stream failure is
+ * logged with full call-site context.
  */
 class DataStoreManager(
     private val dataStore: DataStore<Preferences>,
@@ -53,11 +55,13 @@ class DataStoreManager(
             booleanPreferencesKey("has_seen_welcome")
     }
 
-    // distinctUntilChanged: DataStore re-emits on EVERY write
-    // transaction, so without it an unrelated preference edit would
+    // Private bridge input: [HasSeenWelcomeChanged] is the one
+    // observation surface, so nothing outside this class reads the
+    // Flow. distinctUntilChanged because DataStore re-emits on EVERY
+    // write transaction; without it an unrelated preference edit would
     // re-publish this event (and pay the trigger-trace cost) with an
     // unchanged value.
-    val hasSeenWelcome: Flow<Boolean> = dataStore.data
+    private val hasSeenWelcome: Flow<Boolean> = dataStore.data
         .map { prefs -> prefs[KEY_HAS_SEEN_WELCOME] ?: false }
         .distinctUntilChanged()
 
@@ -110,7 +114,8 @@ class DataStoreManager(
         }
     }
 
-    /** Removes the welcome flag; [hasSeenWelcome] falls back to false. */
+    /** Removes the welcome flag; the stored value falls back to false
+     * and [HasSeenWelcomeChanged] re-publishes on the change. */
     suspend fun clearHasSeenWelcome() {
         runCatching {
             dataStore.edit { prefs -> prefs.remove(KEY_HAS_SEEN_WELCOME) }

@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 import kotlin.collections.iterator
+import kotlin.reflect.KClass
 
 /**
  * Central event hub:
@@ -187,10 +188,16 @@ class EventManager {
      * [unsubscribeOwner], the primary contract, with auto-removal as
      * the safety net.
      *
-     * Pass lambda LITERALS: stored `(Payload) -> Unit` values and
-     * function references do not adapt to a receiver type. When
-     * [owner] is not `this`, members of the enclosing class need an
-     * explicit `this@Outer`, since the owner receiver shadows it.
+     * Lambda literals, UNBOUND member references (`Screen::handle`),
+     * and two-parameter function references all adapt to
+     * `OwnerType.(PayloadType) -> Unit` and capture no owner, so they
+     * are safe. Bound references (`screen::handle`) and stored
+     * `(PayloadType) -> Unit` values do not adapt to the receiver
+     * type and are rejected at compile time; the pinning hazard is a
+     * LAMBDA whose body captures the owner (or anything strongly
+     * holding it), which stays reachable until [unsubscribeOwner].
+     * When [owner] is not `this`, members of the enclosing class need
+     * an explicit `this@Outer`, since the owner receiver shadows it.
      *
      * If a replaying key was previously triggered, the cached value
      * is replayed immediately. Callbacks run on the main queue and
@@ -291,6 +298,35 @@ class EventManager {
      */
     fun hasFired(key: AnyEventKey): Boolean =
         flowFor(key).replayCache.isNotEmpty()
+
+    /**
+     * Typed stream of [key] payloads. A non-null payload that is not
+     * a [payloadType] is dropped AND logged at error level, matching
+     * the publish-side backstop, so a key/type mismatch at a collect
+     * site is never silent. Null payloads (signal deliveries) are
+     * dropped silently: they carry no type to mismatch.
+     */
+    fun <PayloadType : Any> typedEvents(
+        key: AnyEventKey,
+        payloadType: KClass<PayloadType>,
+    ): Flow<PayloadType> =
+        eventsOf(key).mapNotNull { payload ->
+            when {
+                payload == null -> null
+                payloadType.isInstance(payload) -> {
+                    @Suppress("UNCHECKED_CAST")
+                    payload as PayloadType
+                }
+                else -> {
+                    logManager?.error(
+                        "Dropped '${key.eventName}' at collect site: " +
+                            "expected ${payloadType.simpleName}, got " +
+                            "${payload::class.simpleName}",
+                    )
+                    null
+                }
+            }
+        }
 
     /** The stream for [key], created on first touch. */
     private fun flowFor(key: AnyEventKey): MutableSharedFlow<Any?> =
@@ -467,11 +503,13 @@ class EventManager {
     }
 }
 
-/** Typed event stream; payloads that are not [PayloadType] are dropped. */
+/** Typed event stream; non-null payloads that are not [PayloadType]
+ * are dropped AND logged at error level (see
+ * [EventManager.typedEvents]); null signal payloads drop silently. */
 inline fun <reified PayloadType : Any> EventManager.typedEventsOf(
     key: AnyEventKey,
 ): Flow<PayloadType> =
-    eventsOf(key).mapNotNull { payload -> payload as? PayloadType }
+    typedEvents(key, PayloadType::class)
 
 /**
  * Weak reference to a listener's owner, so subscriptions die with their

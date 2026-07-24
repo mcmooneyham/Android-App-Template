@@ -78,4 +78,16 @@
     <string name="flag_source_provider">remote value</string>
     <string name="flag_source_override">local override</string>
 
+    <!-- Template page (the :templates exemplar). Hosted here, not in
+         :templates, so the exemplar's R import already points at the
+         module a copied page lands in and survives the copy
+         unchanged. -->
+    <string name="template_title">Template</string>
+    <string name="template_section_readings">Readings</string>
+    <string name="template_latest_reading_title">Latest reading</string>
+    <string name="template_reading_enriched">Enriched</string>
+    <string name="template_reading_none">none yet</string>
+    <string name="template_clear_history_title">Clear history</string>
+    <string name="template_reading_count">%1$d reading(s) recorded</string>
+
 </resources>

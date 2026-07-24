@@ -21,11 +21,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import com.mattmooneyham.base.android.ui.R
 import com.mattmooneyham.base.android.views.BaseAppTheme
 import com.mattmooneyham.base.android.animations.AppAnimations
 import com.mattmooneyham.base.android.constants.BrandColors
+import com.mattmooneyham.base.android.designSystem.AppDimens
 import com.mattmooneyham.base.android.designSystem.AppShapes
 import com.mattmooneyham.base.android.designSystem.AppSpacing
 
@@ -64,7 +64,7 @@ fun HeroCard(
         Column(
             verticalArrangement =
                 Arrangement.spacedBy(AppSpacing.contentGapMedium),
-            modifier = Modifier.padding(24.dp),
+            modifier = Modifier.padding(AppSpacing.xxl),
         ) {
             Text(
                 text = label.uppercase(),
@@ -91,7 +91,7 @@ fun HeroCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
+                        .size(AppDimens.statusDotSize)
                         .background(
                             color = statusDotColor,
                             shape = CircleShape,

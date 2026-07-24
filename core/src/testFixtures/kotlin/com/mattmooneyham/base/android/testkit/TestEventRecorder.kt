@@ -128,7 +128,11 @@ class TestEventRecorder(private val eventManager: EventManager) {
     /**
      * Asserts the recorded log contains [expectedKeys] as a
      * subsequence: each key fired, in this relative order, with any
-     * other deliveries allowed in between.
+     * other deliveries allowed in between. What is asserted is
+     * RECORDED ARRIVAL order, which is deterministic under the
+     * unconfined test Main dispatcher (delivery runs synchronously in
+     * trigger order). Production code must not rely on cross-key
+     * ordering: EventManager ordering rule 1 disclaims it.
      */
     fun assertOrder(vararg expectedKeys: AnyEventKey) {
         val recordedKeys = synchronized(recordedEvents) {

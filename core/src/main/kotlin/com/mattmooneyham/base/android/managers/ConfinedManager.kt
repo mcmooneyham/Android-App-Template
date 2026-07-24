@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -14,9 +15,12 @@ import kotlinx.coroutines.withContext
  * - A NAMED SERIAL CONFINEMENT: one thread's worth of
  *   Dispatchers.Default, named after the manager so stack traces and
  *   coroutine dumps identify the owner. Because [managerScope] executes
- *   at most one coroutine at a time, plain `var` state is safe and
- *   check-then-set sequences are atomic between the manager's own
- *   coroutines, with no locks and no Main-dispatcher dependency.
+ *   at most one coroutine at a time, plain `var` state is safe with no
+ *   locks and no Main-dispatcher dependency, and check-then-set
+ *   sequences are atomic BETWEEN SUSPENSION POINTS only: a
+ *   check-then-set that spans an await or an [onIo]/[onCpu] hop can
+ *   interleave with the manager's other confined coroutines, so
+ *   re-check confined state after resuming.
  * - A SUPERVISED SCOPE WITH AN EXCEPTION HANDLER: an uncaught coroutine
  *   exception crashes an Android app, so the handler is load-bearing,
  *   not cosmetic. It logs through the injected LogManager; a failed
@@ -93,6 +97,17 @@ abstract class ConfinedManager(
      * call start() themselves. Default: nothing.
      */
     open fun start() = Unit
+
+    /**
+     * Deterministic fence: suspends until every task queued on the
+     * serial confinement BEFORE this call has run. Exists for specs
+     * that must await fire-and-forget entry points without sleeping;
+     * tasks queued after this call may still be pending when it
+     * returns.
+     */
+    suspend fun awaitConfinement() {
+        managerScope.launch { }.join()
+    }
 
     /**
      * Cancels every coroutine on [managerScope]. A closed manager

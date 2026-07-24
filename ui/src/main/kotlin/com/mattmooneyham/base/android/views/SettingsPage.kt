@@ -67,6 +67,16 @@ fun SettingsPage(settingsViewModel: SettingsViewModel) {
     val context = LocalContext.current
     val exportScope = rememberCoroutineScope()
 
+    // Share-sheet copy is resolved IN COMPOSITION so a configuration
+    // change (locale) recomposes fresh strings; the click callback
+    // below captures the resolved values instead of querying the
+    // context, which lint forbids (LocalContextGetResourceValueCall:
+    // LocalContext reads are never invalidated by config changes).
+    val logsExportSubject = stringResource(R.string.logs_export_subject)
+    val logsExportNoneMessage = stringResource(R.string.logs_export_none)
+    val logsExportChooserTitle =
+        stringResource(R.string.logs_export_chooser_title)
+
     // The Debug section exists only in debug builds; release passes no
     // rows and renders no section (overrides are also locked at the
     // manager level, so this gate is cosmetic, not the enforcement).
@@ -96,12 +106,7 @@ fun SettingsPage(settingsViewModel: SettingsViewModel) {
                     settingsViewModel.writeLogExportSnapshot()
                 val sendIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
-                    // Click callbacks are not composable scope, so the
-                    // share-sheet copy resolves through the context.
-                    putExtra(
-                        Intent.EXTRA_SUBJECT,
-                        context.getString(R.string.logs_export_subject),
-                    )
+                    putExtra(Intent.EXTRA_SUBJECT, logsExportSubject)
                     if (exportPath != null) {
                         // The FULL history rides a content URI; text
                         // extras would drop the rotated half and can
@@ -118,16 +123,14 @@ fun SettingsPage(settingsViewModel: SettingsViewModel) {
                     } else {
                         putExtra(
                             Intent.EXTRA_TEXT,
-                            context.getString(R.string.logs_export_none),
+                            logsExportNoneMessage,
                         )
                     }
                 }
                 context.startActivity(
                     Intent.createChooser(
                         sendIntent,
-                        context.getString(
-                            R.string.logs_export_chooser_title,
-                        ),
+                        logsExportChooserTitle,
                     ),
                 )
             }

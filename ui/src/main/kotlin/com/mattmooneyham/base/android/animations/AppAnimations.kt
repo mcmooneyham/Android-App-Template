@@ -68,7 +68,7 @@ object AppAnimations {
     }
 
     /**
-     * Keep-alive tab switching (see NavigationBarScaffold): pages stay
+     * Keep-alive tab switching (see AppShellScaffold): pages stay
      * composed while opacity and a short shared-axis offset animate,
      * which reads far softer than a full-width slide.
      */

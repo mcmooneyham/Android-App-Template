@@ -17,9 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import com.mattmooneyham.base.android.templates.R
 import com.mattmooneyham.base.android.designSystem.AppSpacing
 import com.mattmooneyham.base.android.managers.templateManager.TemplateStateChanged
+import com.mattmooneyham.base.android.ui.R
 import com.mattmooneyham.base.android.viewModels.TemplateViewModel
 import com.mattmooneyham.base.android.views.components.SectionHeader
 import com.mattmooneyham.base.android.views.components.SettingsGroupCard
@@ -70,8 +70,9 @@ fun TemplatePage(
  * and keep ALL motion in animations/AppAnimations.kt. Spacing, shape,
  * and size values come from designSystem (AppSpacing, AppShapes,
  * AppDimens); never hardcode dp literals. User-facing copy lives in
- * res/values/strings.xml (stringResource) so the page localizes; only
- * preview sample data stays literal.
+ * :ui's res/values/strings.xml (stringResource) so the page localizes
+ * and this file's R import stays valid after the copy; only preview
+ * sample data stays literal.
  *
  * (internal rather than private ONLY so this module's exemplar flow
  * test can drive it; real pages keep their content private, and real

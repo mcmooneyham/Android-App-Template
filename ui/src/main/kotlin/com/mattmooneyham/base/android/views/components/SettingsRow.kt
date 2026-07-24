@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Delete
@@ -25,9 +24,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import com.mattmooneyham.base.android.animations.pressScale
 import com.mattmooneyham.base.android.designSystem.AppDimens
+import com.mattmooneyham.base.android.designSystem.AppShapes
 import com.mattmooneyham.base.android.designSystem.AppSpacing
 import com.mattmooneyham.base.android.views.BaseAppTheme
 import com.mattmooneyham.base.android.constants.BrandColors
@@ -47,9 +46,9 @@ fun SettingsRow(
     isDestructive: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
-    val accentColor = Color(
-        if (isDestructive) BrandColors.DANGER else BrandColors.BRAND,
-    )
+    val accentColor =
+        if (isDestructive) Color(BrandColors.DANGER)
+        else MaterialTheme.colorScheme.primary
     val pressInteractionSource = remember { MutableInteractionSource() }
 
     Row(
@@ -78,10 +77,10 @@ fun SettingsRow(
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(38.dp)
+                .size(AppDimens.iconTileSize)
                 .background(
                     color = accentColor.copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = AppShapes.iconTile,
                 ),
         ) {
             Icon(

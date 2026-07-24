@@ -18,7 +18,6 @@ import java.nio.file.Files
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -59,14 +58,19 @@ class DataStoreManagerSpec {
                 recorder.expectState(HasSeenWelcomeChanged),
             )
 
-            // Write, then observe the change as an event AND read it
-            // back through the store's own flow.
+            // Write, then observe the change as an event AND as the
+            // bus's cached current value (the ONE observation surface:
+            // the store's own flow is private by design).
             dataStoreManager.setHasSeenWelcome(true)
             assertEquals(
                 true,
                 recorder.expectState(HasSeenWelcomeChanged),
             )
-            assertEquals(true, dataStoreManager.hasSeenWelcome.first())
+            assertEquals(
+                true,
+                app.component.eventManager
+                    .currentValue(HasSeenWelcomeChanged),
+            )
 
             // The value really persisted to the per-test store file.
             val storeFile =
@@ -79,7 +83,11 @@ class DataStoreManagerSpec {
                 false,
                 recorder.expectState(HasSeenWelcomeChanged),
             )
-            assertEquals(false, dataStoreManager.hasSeenWelcome.first())
+            assertEquals(
+                false,
+                app.component.eventManager
+                    .currentValue(HasSeenWelcomeChanged),
+            )
         }
 
     @Test

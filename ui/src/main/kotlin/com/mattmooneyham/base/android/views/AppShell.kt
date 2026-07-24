@@ -60,7 +60,6 @@ import com.mattmooneyham.base.android.navigation.HomeDestination
 import com.mattmooneyham.base.android.navigation.rememberAppRouter
 import com.mattmooneyham.base.android.viewModels.MainViewModel
 import com.mattmooneyham.base.android.viewModels.SettingsViewModel
-import com.mattmooneyham.base.android.constants.BrandColors
 
 data class NavigationPage(
     @StringRes val nameResId: Int,
@@ -76,16 +75,17 @@ private val TabBarDividerLight = Color(0x4A3C3C43)
 private val TabBarDividerDark = Color(0x99545458)
 
 /**
- * Root of the app: a bottom tab bar switching between the Home and
- * Settings tabs, each hosting its own typed back stack (AppRouter +
- * TabStackHost) inside the keep-alive shell. Deep links resolve to
- * typed destinations in one router method (AppRouter.handleDeepLink);
- * system back pops the selected tab's stack and otherwise lets the
- * activity finish. The whole navigation state survives configuration
- * change and process death via rememberAppRouter's JSON saver.
+ * The app shell at the root of the app: a bottom tab bar switching
+ * between the Home and Settings tabs, each hosting its own typed back
+ * stack (AppRouter + TabStackHost) inside the keep-alive shell. Deep
+ * links resolve to typed destinations in one router method
+ * (AppRouter.handleDeepLink); system back pops the selected tab's
+ * stack and otherwise lets the activity finish. The whole navigation
+ * state survives configuration change and process death via
+ * rememberAppRouter's JSON saver.
  */
 @Composable
-fun NavigationBar(
+fun AppShell(
     mainViewModel: MainViewModel,
     settingsViewModel: SettingsViewModel,
     pendingDeepLinkUrl: String?,
@@ -111,7 +111,7 @@ fun NavigationBar(
 
     RouteOnAppEvents(appRouter)
 
-    NavigationBarScaffold(
+    AppShellScaffold(
         selectedTab = appRouter.selectedTab,
         onTabSelected = appRouter::selectTab,
         modifier = modifier,
@@ -185,7 +185,7 @@ fun NavigationBar(
 private fun RouteOnAppEvents(appRouter: AppRouter) = Unit
 
 @Composable
-internal fun NavigationBarScaffold(
+internal fun AppShellScaffold(
     selectedTab: AppTab,
     onTabSelected: (AppTab) -> Unit,
     modifier: Modifier = Modifier,
@@ -269,7 +269,8 @@ private fun BottomTabBar(
                         height = AppDimens.TabBar.pillHeight,
                     )
                     .background(
-                        color = Color(BrandColors.BRAND).copy(alpha = 0.14f),
+                        color = MaterialTheme.colorScheme.primary
+                            .copy(alpha = 0.14f),
                         shape = CircleShape,
                     ),
             )
@@ -295,12 +296,9 @@ private fun TabBarItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // The selected item uses the non-adaptive BRAND blue in both
-    // appearances, deliberately bypassing colorScheme.primary (which
-    // swaps to BRAND_DISABLED in dark mode).
     val itemTint by animateColorAsState(
         targetValue =
-            if (isSelected) Color(BrandColors.BRAND)
+            if (isSelected) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.onSurfaceVariant,
         animationSpec = AppAnimations.tabTintSpec,
         label = "tabItemTint",
@@ -419,9 +417,9 @@ private fun AppTab.toNavigationPage(): NavigationPage = when (this) {
 
 @Preview(showBackground = true)
 @Composable
-private fun NavigationBarScaffoldPreview() {
+private fun AppShellScaffoldPreview() {
     BaseAppTheme {
-        NavigationBarScaffold(
+        AppShellScaffold(
             selectedTab = AppTab.HOME,
             onTabSelected = {},
         ) {

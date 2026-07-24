@@ -8,10 +8,11 @@ import androidx.compose.ui.unit.sp
 
 /**
  * The type scale, fed to MaterialTheme by BaseAppTheme so every
- * `MaterialTheme.typography.x` read in the app resolves here. The
- * roles the app uses are pinned EXPLICITLY (at Material 3's default
- * metrics today, so adopting this file changed nothing visually);
- * edit a size here and every screen follows.
+ * `MaterialTheme.typography.x` read in the app resolves here. EVERY
+ * Material role is pinned explicitly (at Material 3's default metrics
+ * today, so adopting this file changed nothing visually): a role a
+ * screen starts using tomorrow is already covered, and no role can
+ * silently fall back to a default that ignores the app's font.
  */
 
 /** Swap point for a brand font: replace this one value with a
@@ -22,54 +23,43 @@ val AppFontFamily: FontFamily = FontFamily.Default
  * the Material roles. */
 val SectionHeaderLetterSpacing = 1.2.sp
 
+private fun appTextStyle(
+    fontSize: Int,
+    lineHeight: Int,
+    fontWeight: FontWeight = FontWeight.Normal,
+    letterSpacing: Double = 0.0,
+): TextStyle = TextStyle(
+    fontFamily = AppFontFamily,
+    fontWeight = fontWeight,
+    fontSize = fontSize.sp,
+    lineHeight = lineHeight.sp,
+    letterSpacing = letterSpacing.sp,
+)
+
 val AppTypography = Typography(
-    // Page titles ("Home", "Settings", "Joke details"); call sites
-    // add FontWeight.Bold.
-    headlineLarge = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 32.sp,
-        lineHeight = 40.sp,
-        letterSpacing = 0.sp,
-    ),
+    displayLarge = appTextStyle(57, 64, letterSpacing = -0.25),
+    displayMedium = appTextStyle(45, 52),
+    displaySmall = appTextStyle(36, 44),
+    // Page titles ("Home", "Settings"); call sites add Bold.
+    headlineLarge = appTextStyle(32, 40),
+    // The hero card's headline.
+    headlineMedium = appTextStyle(28, 36),
+    headlineSmall = appTextStyle(24, 32),
+    // Sheet titles (the feature-flag sheet).
+    titleLarge = appTextStyle(22, 28),
     // Card and row titles.
-    titleMedium = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.15.sp,
-    ),
+    titleMedium = appTextStyle(16, 24, FontWeight.Medium, 0.15),
+    titleSmall = appTextStyle(14, 20, FontWeight.Medium, 0.1),
     // Primary content (joke setups, dialog bodies).
-    bodyLarge = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.5.sp,
-    ),
+    bodyLarge = appTextStyle(16, 24, letterSpacing = 0.5),
     // Secondary content (punchlines, supporting rows).
-    bodyMedium = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-        letterSpacing = 0.25.sp,
-    ),
+    bodyMedium = appTextStyle(14, 20, letterSpacing = 0.25),
     // Fine print (card subtitles, inline errors).
-    bodySmall = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.4.sp,
-    ),
-    // The smallest labels (tab bar, section headers, chips).
-    labelSmall = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.5.sp,
-    ),
+    bodySmall = appTextStyle(12, 16, letterSpacing = 0.4),
+    // Chips and hero CTA.
+    labelLarge = appTextStyle(14, 20, FontWeight.Medium, 0.1),
+    // Section headers and eyebrows.
+    labelMedium = appTextStyle(12, 16, FontWeight.Medium, 0.5),
+    // The smallest labels (tab bar).
+    labelSmall = appTextStyle(11, 16, FontWeight.Medium, 0.5),
 )

@@ -45,6 +45,11 @@ class FakeJokeApi {
         /** Serves syntactically valid JSON that does not decode into
          * the DTO (missing required fields). */
         data object MalformedPayload : PlannedReply
+
+        /** Serves a 200 whose body is text/html (a captive portal's
+         * interception page), so content negotiation cannot produce
+         * the DTO at all. */
+        data object WrongContentType : PlannedReply
     }
 
     private val repliesLock = Any()
@@ -89,6 +94,12 @@ class FakeJokeApi {
     fun enqueueMalformedPayload() {
         synchronized(repliesLock) {
             plannedReplies += PlannedReply.MalformedPayload
+        }
+    }
+
+    fun enqueueWrongContentType() {
+        synchronized(repliesLock) {
+            plannedReplies += PlannedReply.WrongContentType
         }
     }
 
@@ -149,6 +160,17 @@ class FakeJokeApi {
                 headers = headersOf(
                     HttpHeaders.ContentType,
                     ContentType.Application.Json.toString(),
+                ),
+            )
+            PlannedReply.WrongContentType -> respond(
+                // text/html bypasses JSON content negotiation, so the
+                // client throws NoTransformationFoundException and the
+                // fetch classifies as FailureKind.DECODE.
+                content = "<html>captive portal</html>",
+                status = HttpStatusCode.OK,
+                headers = headersOf(
+                    HttpHeaders.ContentType,
+                    ContentType.Text.Html.toString(),
                 ),
             )
         }

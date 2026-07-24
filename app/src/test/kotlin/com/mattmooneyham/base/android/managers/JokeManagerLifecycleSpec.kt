@@ -7,7 +7,6 @@ import com.mattmooneyham.base.android.managers.jokeManager.JokeStateChanged
 import com.mattmooneyham.base.android.managers.jokeManager.JokeStatus
 import com.mattmooneyham.base.android.testkit.FakeJokeApi
 import com.mattmooneyham.base.android.testkit.TestAppContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -70,10 +69,10 @@ class JokeManagerLifecycleSpec {
             // Both land while the first fetch is parked at the gate.
             app.component.jokeManager.refreshJoke()
             app.component.jokeManager.refreshJoke()
-            // Give the manager's serial confinement real time to
-            // process (and drop) them; a dropped refresh has no
-            // completion signal to await.
-            delay(200)
+            // A dropped refresh has no completion signal to await; the
+            // fence resumes once the confinement has processed (and
+            // dropped) both launches queued above.
+            app.component.jokeManager.awaitConfinement()
 
             jokeApi.releaseResponses()
             assertEquals(
@@ -231,6 +230,29 @@ class JokeManagerLifecycleSpec {
             ) { state -> state.status == JokeStatus.FAILED }
             // Strict Json (no lenient mode) is what guarantees a wrong
             // payload SURFACES here instead of being silently coerced.
+            assertEquals(FailureKind.DECODE, failedState.failure?.kind)
+        }
+
+    @Test
+    fun `a wrong content-type response classifies as DECODE`() =
+        runBlocking<Unit> {
+            val app = startApp()
+            val recorder = app.newRecorder().record(JokeStateChanged)
+            recorder.expectStateMatching(JokeStateChanged) { state ->
+                state.status == JokeStatus.SUCCESS
+            }
+
+            jokeApi.enqueueWrongContentType()
+            app.component.jokeManager.refreshJoke()
+
+            val failedState = recorder.expectStateMatching(
+                JokeStateChanged,
+            ) { state -> state.status == JokeStatus.FAILED }
+            // The captive-portal shape: a 200 whose text/html body
+            // never reaches the JSON decoder. Ktor raises
+            // NoTransformationFoundException, which must classify as
+            // DECODE, not UNKNOWN, so views show "bad data", not a
+            // shrug.
             assertEquals(FailureKind.DECODE, failedState.failure?.kind)
         }
 

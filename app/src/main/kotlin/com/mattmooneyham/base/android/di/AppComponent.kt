@@ -16,6 +16,7 @@ import com.mattmooneyham.base.android.managers.dataStoreManager.createDataStoreS
 import com.mattmooneyham.base.android.managers.dataStoreManager.createPreferencesDataStore
 import io.ktor.client.HttpClient
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.TimeSource
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.Json
@@ -76,9 +77,11 @@ class AppComponent(config: AppConfig) {
     private val managersInConstructionOrder =
         mutableListOf<ConfinedManager>()
 
-    // Makes start() idempotent, so "managers see at most one start()"
-    // is a guarantee rather than a caller convention.
-    private var hasStarted = false
+    // Makes start() idempotent for CONCURRENT callers too, not just
+    // repeated ones: compareAndSet admits exactly one winner, so
+    // "managers see at most one start()" is a guarantee rather than
+    // a caller convention.
+    private val hasStarted = AtomicBoolean(false)
 
     /** Registers a manager's start order AND teardown at once. */
     private fun <ManagerType : ConfinedManager>
@@ -239,8 +242,7 @@ class AppComponent(config: AppConfig) {
      * start() per component however many callers reach it.
      */
     fun start() {
-        if (hasStarted) return
-        hasStarted = true
+        if (!hasStarted.compareAndSet(false, true)) return
         managersInConstructionOrder.forEach { manager ->
             manager.start()
         }
@@ -267,9 +269,19 @@ class AppComponent(config: AppConfig) {
             )
         }
         // Guarded per step: one throwing teardown must not strand the
-        // members constructed before it.
-        teardownSteps.forEach { teardownStep ->
-            runCatching { teardownStep() }
+        // members constructed before it. Each failure is reported,
+        // never swallowed, and the walk continues.
+        val teardownStepCount = teardownSteps.size
+        teardownSteps.forEachIndexed { stepIndex, teardownStep ->
+            runCatching { teardownStep() }.onFailure { stepFailure ->
+                // stderr by design: the log manager may already be
+                // closed mid-walk, so this is the last-resort channel.
+                System.err.println(
+                    "AppComponent close(): teardown step " +
+                        "${stepIndex + 1} of $teardownStepCount failed",
+                )
+                stepFailure.printStackTrace(System.err)
+            }
         }
     }
 }

@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.annotation.StringRes
@@ -25,7 +24,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import com.mattmooneyham.base.android.ui.R
-import com.mattmooneyham.base.android.constants.BrandColors
 import com.mattmooneyham.base.android.designSystem.AppSpacing
 import com.mattmooneyham.base.android.managers.jokeManager.JokeAutoRetryOnReconnectFlag
 import com.mattmooneyham.base.android.managers.featureFlagManager.BooleanFlag
@@ -101,11 +99,7 @@ fun FeatureFlagSheetContent(
             }
         }
 
-        Spacer(
-            modifier = Modifier
-                .height(AppSpacing.pageBottom)
-                .navigationBarsPadding(),
-        )
+        Spacer(modifier = Modifier.height(AppSpacing.pageBottom))
     }
 }
 
@@ -164,8 +158,8 @@ private fun FeatureFlagRow(
         // bar's selection pill.
         val segmentColors = SegmentedButtonDefaults.colors(
             activeContainerColor =
-                Color(BrandColors.BRAND).copy(alpha = 0.14f),
-            activeContentColor = Color(BrandColors.BRAND),
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+            activeContentColor = MaterialTheme.colorScheme.primary,
             activeBorderColor = MaterialTheme.colorScheme.outlineVariant,
             inactiveContainerColor = Color.Transparent,
             inactiveContentColor =

@@ -4,7 +4,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
-import com.mattmooneyham.base.android.templates.R
+import com.mattmooneyham.base.android.ui.R
 import com.mattmooneyham.base.android.views.BaseAppTheme
 import com.mattmooneyham.base.android.views.TemplatePageContent
 import org.junit.Assert.assertEquals
@@ -34,8 +34,9 @@ import org.junit.Test
  * STEP 1: MATCH SEMANTICS, NOT INTERNALS. Find nodes by user-visible
  * text, contentDescription, or a stable testTag (the JokeCard
  * pattern) so tests survive refactors; never by tree position.
- * Localized copy resolves through the module's own resources
- * ([templateString]), never through hardcoded English literals.
+ * Localized copy resolves through :ui's R class ([templateString]),
+ * the same resources the page reads, never through hardcoded English
+ * literals.
  *
  * STEP 2: PREFER waitForText/waitUntil (FlowTestHelpers) over sleeps
  * in real flow tests: the app settles asynchronously.

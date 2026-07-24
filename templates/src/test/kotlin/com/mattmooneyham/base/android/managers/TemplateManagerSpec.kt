@@ -145,6 +145,10 @@ class TemplateManagerSpec {
                 state.readingCount == 0 && state.latestReading == null
             }
             // The signal fires AFTER the fact it announces is true.
+            // assertOrder checks the recorder's ARRIVAL order, which
+            // the unconfined harness makes deterministic; production
+            // code must never rely on cross-key ordering (bus
+            // ordering rule 1).
             recorder.expectEvent(TemplateHistoryCleared)
             recorder.assertOrder(
                 TemplateStateChanged,

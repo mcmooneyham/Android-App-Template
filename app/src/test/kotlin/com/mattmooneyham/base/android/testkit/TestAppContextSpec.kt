@@ -101,9 +101,12 @@ class TestAppContextSpec {
         app.component.start()
         app.component.start()
 
-        // A second start() would launch a second fetch; give the
-        // pipeline real time to prove it never arrives.
-        Thread.sleep(200)
+        // A second start() would queue a second fetch on the joke
+        // manager's confinement; the fence proves the queue drained
+        // with nothing new launched.
+        runBlocking {
+            app.component.jokeManager.awaitConfinement()
+        }
         assertEquals(1, jokeApi.requestCount)
     }
 }

@@ -140,4 +140,39 @@ class AppRouterSpec {
             restoredRouter.snapshotState(),
         )
     }
+
+    @Test
+    fun `every tab's state survives a snapshot round trip`() {
+        // Exhaustive when STATEMENT (no else) over the enum: adding a
+        // tab refuses to compile here until its snapshot wiring is
+        // asserted below.
+        AppTab.entries.forEach { tab ->
+            when (tab) {
+                AppTab.HOME -> {
+                    val originalRouter = AppRouter()
+                    originalRouter.homeRouter.push(
+                        HomeDestination.JokeDetail(jokeId = 3),
+                    )
+                    val restoredRouter =
+                        AppRouter(originalRouter.snapshotState())
+                    assertEquals(
+                        listOf(HomeDestination.JokeDetail(jokeId = 3)),
+                        restoredRouter.homeRouter.backStack,
+                    )
+                }
+                AppTab.SETTINGS -> {
+                    // No pushable Settings destination exists yet; the
+                    // tab's persisted fact is the selection itself.
+                    val originalRouter = AppRouter()
+                    originalRouter.selectTab(AppTab.SETTINGS)
+                    val restoredRouter =
+                        AppRouter(originalRouter.snapshotState())
+                    assertEquals(
+                        AppTab.SETTINGS,
+                        restoredRouter.selectedTab,
+                    )
+                }
+            }
+        }
+    }
 }

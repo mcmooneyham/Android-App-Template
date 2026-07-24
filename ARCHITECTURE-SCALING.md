@@ -110,7 +110,7 @@ shared: session keys are just keys whose caches the reset clears.
 
 ROUTING THE SESSION END: `SessionEnded` is also the first fact the
 navigation seam routes. The shell's `RouteOnAppEvents` choke point
-(NavigationBar.kt) ships empty today; adopting the session component
+(AppShell.kt) ships empty today; adopting the session component
 fills it, keeping ALL routing policy in that one function:
 
 ```kotlin
@@ -271,6 +271,14 @@ Three mechanisms, in adoption order:
    catalog is generated so it can never lie; hand-written event docs
    always do, eventually.
 
+The shipped guards do not scale for free: `GUARDED_MODULES` in
+`WiringConventionsGuardTest` must grow with every new feature module,
+or that module's keys and triggers become invisible to the
+single-publisher scan; and the AppModule-mirror regexes assume
+`*Manager`-suffixed class names, so Impl-style naming at the api/impl
+split needs the capability-publisher replacement (mechanism 1) in
+place first.
+
 ## 5. Lazy startup tiers
 
 Adoption threshold: about 15 managers, or when a measured cold start
@@ -285,19 +293,33 @@ dependency story.
 Tier the component's properties instead of introducing a framework:
 
 - TIER 0, eager (never lazy): `eventManager`, `logManager`, the crash
-  handler, `networkManager`. Infrastructure that everything else
+  handler, `connectivityManager`. Infrastructure that everything else
   assumes is alive.
 - TIER 1, first-frame: whatever the launch screen observes; keep
   eager until measurement says otherwise.
-- TIER 2, on demand: `by lazy { ... }` property initializers in
+- TIER 2, on demand: `by lazy` property initializers in
   `AppComponent` for managers whose first use is behind navigation
   (settings, exports, rarely-visited features).
+
+`AppComponent.start()` walks the manager list ONCE at boot, so a
+tier-2 manager that materializes later never receives that call. The
+lazy initializer therefore self-starts; lazy materialization IS that
+manager's start moment:
+
+```kotlin
+val syncManager by lazy {
+    SyncManager(httpClient, logManager, eventManager)
+        .registered()
+        .also { it.start() }
+}
+```
 
 Rules that keep laziness honest: a lazy manager must not be one that
 others subscribe to at startup (its keys publish nothing until first
 touch; replay makes LATE subscribers safe, not late publishers);
-`close()` must check `isInitialized` on lazy delegates and skip the
-untouched ones; and tiers are recorded in the component's KDoc so the
+`close()` needs no change, because `registered()` runs at
+materialization, so an untouched lazy never enters the teardown
+registry; and tiers are recorded in the component's KDoc so the
 next reader knows why a property is lazy. Resist DAG frameworks and
 reflection: at template scale, `by lazy` on a plain class is the
 entire mechanism.

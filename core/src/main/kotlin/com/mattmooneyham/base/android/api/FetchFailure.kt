@@ -1,5 +1,6 @@
 package com.mattmooneyham.base.android.api
 
+import io.ktor.client.call.NoTransformationFoundException
 import io.ktor.client.network.sockets.ConnectTimeoutException
 import io.ktor.client.network.sockets.SocketTimeoutException
 import io.ktor.client.plugins.HttpRequestTimeoutException
@@ -42,6 +43,14 @@ fun Throwable.toFetchFailure(): FetchFailure = when (this) {
     is ResponseException -> FetchFailure(
         kind = FailureKind.HTTP,
         detail = "HTTP ${response.status}",
+    )
+    // A 2xx body content negotiation cannot turn into the DTO (e.g. a
+    // captive portal's text/html 200) is a decode failure, not
+    // UNKNOWN; Ktor raises it as this UnsupportedOperationException
+    // subtype, which no arm below would catch.
+    is NoTransformationFoundException -> FetchFailure(
+        kind = FailureKind.DECODE,
+        detail = message,
     )
     is ContentConvertException, is SerializationException -> FetchFailure(
         kind = FailureKind.DECODE,

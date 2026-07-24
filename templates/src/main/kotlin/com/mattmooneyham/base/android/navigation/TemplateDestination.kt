@@ -24,7 +24,7 @@ sealed interface TemplateDestination {
     data class ReadingDetail(val readingId: Int) : TemplateDestination
 }
 
-// STEP 2: RENDER IT. In NavigationBar.kt, the tab's TabStackHost gains
+// STEP 2: RENDER IT. In AppShell.kt, the tab's TabStackHost gains
 // one exhaustive branch (the compiler forces this everywhere the
 // hierarchy is switched):
 //

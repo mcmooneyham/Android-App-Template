@@ -36,28 +36,33 @@ class WiringConventionsGuardTest {
             declaringFileByKey.isNotEmpty(),
         )
 
-        val violations = sources.flatMap { sourceFile ->
-            TRIGGER_CALL.findAll(commentFreeTextOf(sourceFile))
-                .mapNotNull { match ->
-                    val keyName = match.groupValues[1]
-                    when (val declaringFile =
-                        declaringFileByKey[keyName]) {
-                        // An identifier that is not a declared key is
-                        // an alias (`val k = SomeKey`), which would
-                        // otherwise slip this scan entirely: trigger
-                        // through the key object itself, always.
-                        null ->
-                            "${sourceFile.name} triggers '$keyName', " +
-                                "which is not a declared key object " +
-                                "(no aliasing)"
-                        sourceFile -> null
-                        else ->
-                            "${sourceFile.name} triggers $keyName, " +
-                                "declared in ${declaringFile.name}"
+        val violations = sources
+            // The bus mechanism itself declares no keys, and its own
+            // fun trigger(...) declarations would trip the dotless scan.
+            .filterNot { file -> file.name == "EventManager.kt" }
+            .flatMap { sourceFile ->
+                TRIGGER_CALL.findAll(commentFreeTextOf(sourceFile))
+                    .mapNotNull { match ->
+                        val keyName = match.groupValues[1]
+                        when (val declaringFile =
+                            declaringFileByKey[keyName]) {
+                            // An identifier that is not a declared key
+                            // is an alias (`val k = SomeKey`), which
+                            // would otherwise slip this scan entirely:
+                            // trigger through the key object itself,
+                            // always.
+                            null ->
+                                "${sourceFile.name} triggers " +
+                                    "'$keyName', which is not a " +
+                                    "declared key object (no aliasing)"
+                            sourceFile -> null
+                            else ->
+                                "${sourceFile.name} triggers $keyName, " +
+                                    "declared in ${declaringFile.name}"
+                        }
                     }
-                }
-                .toList()
-        }
+                    .toList()
+            }
         assertTrue(
             "Only the declaring manager's file may trigger a key " +
                 "(the single-publisher rule); found: $violations",
@@ -114,24 +119,33 @@ class WiringConventionsGuardTest {
             navigationSources.isNotEmpty(),
         )
 
-        val violations = navigationSources.flatMap { sourceFile ->
-            DESTINATION_DECLARATION
-                .findAll(commentFreeTextOf(sourceFile))
-                .mapNotNull { match ->
-                    val modifierList = match.groupValues[1]
-                    val declarationName = match.groupValues[3]
-                    val hasStableToString = "data" in modifierList ||
-                        "enum" in modifierList ||
-                        "sealed" in modifierList
-                    if (hasStableToString) {
-                        null
-                    } else {
-                        "${sourceFile.name}: $declarationName must " +
-                            "be a data class or data object"
-                    }
+        val destinationDeclarations = navigationSources
+            .flatMap { sourceFile ->
+                DESTINATION_DECLARATION
+                    .findAll(commentFreeTextOf(sourceFile))
+                    .map { match -> sourceFile to match }
+                    .toList()
+            }
+        assertTrue(
+            "The guard found no destination declarations; its scan " +
+                "is broken and the guard is vacuous",
+            destinationDeclarations.isNotEmpty(),
+        )
+
+        val violations = destinationDeclarations
+            .mapNotNull { (sourceFile, declarationMatch) ->
+                val modifierList = declarationMatch.groupValues[1]
+                val declarationName = declarationMatch.groupValues[3]
+                val hasStableToString = "data" in modifierList ||
+                    "enum" in modifierList ||
+                    "sealed" in modifierList
+                if (hasStableToString) {
+                    null
+                } else {
+                    "${sourceFile.name}: $declarationName must " +
+                        "be a data class or data object"
                 }
-                .toList()
-        }
+            }
         assertTrue(
             "Destination toString is the saveable-state key and must " +
                 "be stable across process death; found: $violations",
@@ -149,8 +163,12 @@ class WiringConventionsGuardTest {
         val KEY_DECLARATION =
             Regex("""object\s+(\w+)\s*:\s*(?:StateKey|SignalKey)""")
 
-        /** Matches `bus.trigger(Key` and `bus?.trigger(Key`. */
-        val TRIGGER_CALL = Regex("""\.trigger\(\s*(\w+)""")
+        /** Matches dotted calls (`bus.trigger(Key`, `bus?.trigger(Key`)
+         * AND dotless ones (`with(bus) { trigger(Key`), which would
+         * otherwise evade the scan; `fun trigger(` declarations are
+         * excluded by the lookbehind. */
+        val TRIGGER_CALL =
+            Regex("""(?<!fun\s)\btrigger\(\s*(\w+)""")
 
         /** Public manager vals on the component: `val x = XManager(`.
          * The leading anchor excludes `private val` members. */

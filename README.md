@@ -228,9 +228,13 @@ point at which each becomes worth doing.
   so one bad read costs a short delay instead of the feature.
 
   ```kotlin
-  // One-shot work: 3 attempts by default, backoff doubling from
-  // 500 ms, then the last failure rethrows to the caller.
-  val joke = retry(isRetryable = { it is IOException }) {
+  // Transport failures and 5xx retry; 4xx is permanent. 3 attempts
+  // by default, backoff doubling from 500 ms, then rethrow.
+  val joke = retry(
+      isRetryable = { failure ->
+          failure is IOException || failure is ServerResponseException
+      },
+  ) {
       jokeApi.fetchRandomJoke()
   }
 
@@ -305,8 +309,9 @@ DataStore 1.2.1, kotlinx-serialization.
 ./gradlew :app:connectedDebugAndroidTest    # real device or emulator
 ```
 
-The same gate (plus the R8 release build and lint) runs on every
-push via GitHub Actions, and a flag-gated second job runs the UI
+The same gate (plus the R8 release build and lint) runs on pushes
+to main and on every pull request via GitHub Actions, and a
+flag-gated second job runs the UI
 flow tests on an emulator: see `.github/workflows/ci.yml`. The repo
 is self-contained; no external checkouts required.
 

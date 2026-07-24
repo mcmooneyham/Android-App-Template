@@ -38,7 +38,10 @@ docs folder they can never rot; but no module depends on
 - Nothing may depend on `:templates`; it exists to be read and copied.
 - Templates share the app's real package names on purpose, so a copy
   needs no import surgery and same-package helpers (eventState)
-  resolve exactly as they will at the destination.
+  resolve exactly as they will at the destination. For the same
+  reason the page exemplar's strings host in :ui's
+  res/values/strings.xml, so `TemplatePage.kt` already imports :ui's
+  R class and the import survives the copy unchanged.
 - This module is deliberately OUTSIDE the guard tests'
   GUARDED_MODULES, so template keys and flags never pollute the real
   registries; the moment you copy a flag out, register it in

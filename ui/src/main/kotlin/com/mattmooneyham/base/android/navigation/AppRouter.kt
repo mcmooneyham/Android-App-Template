@@ -14,7 +14,7 @@ import java.net.URI
  * THE SEAM RULE: managers and viewmodels NEVER hold or call the
  * router; they publish facts on the event bus, and the shell (the
  * router's only owner) maps facts to router calls in one choke point
- * (RouteOnAppEvents in NavigationBar.kt). Direct user actions stay
+ * (RouteOnAppEvents in AppShell.kt). Direct user actions stay
  * synchronous and dumb: a page's semantic lambda (onOpenJokeDetail)
  * calls the router from the shell's wiring. A LocalAppRouter
  * CompositionLocal is deliberately NOT provided; its threshold is
