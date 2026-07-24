@@ -1,5 +1,6 @@
 package com.mattmooneyham.base.android.views
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -30,11 +31,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -51,6 +50,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.mattmooneyham.base.android.animations.AppAnimations
+import com.mattmooneyham.base.android.navigation.AppRouter
+import com.mattmooneyham.base.android.navigation.AppTab
+import com.mattmooneyham.base.android.navigation.HomeDestination
+import com.mattmooneyham.base.android.navigation.rememberAppRouter
 import com.mattmooneyham.base.android.viewModels.MainViewModel
 import com.mattmooneyham.base.android.viewModels.SettingsViewModel
 import com.mattmooneyham.base.android.constants.BrandColors
@@ -75,44 +78,124 @@ private val TabBarDividerLight = Color(0x4A3C3C43)
 private val TabBarDividerDark = Color(0x99545458)
 
 /**
- * Root of the app: a bottom tab bar switching between the Home and Settings
- * tabs. Two tabs need no back stack, so plain saveable state stands in for
- * a navigation library.
+ * Root of the app: a bottom tab bar switching between the Home and
+ * Settings tabs, each hosting its own typed back stack (AppRouter +
+ * TabStackHost) inside the keep-alive shell. Deep links resolve to
+ * typed destinations in one router method (AppRouter.handleDeepLink);
+ * system back pops the selected tab's stack and otherwise lets the
+ * activity finish. The whole navigation state survives configuration
+ * change and process death via rememberAppRouter's JSON saver.
  */
 @Composable
 fun NavigationBar(
     mainViewModel: MainViewModel,
     settingsViewModel: SettingsViewModel,
+    pendingDeepLinkUrl: String?,
+    onDeepLinkConsumed: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
+    val appRouter = rememberAppRouter()
+
+    // Deep links resolve in one place; the consumed callback clears
+    // the pending URL so recompositions never re-route it.
+    LaunchedEffect(pendingDeepLinkUrl) {
+        if (pendingDeepLinkUrl != null) {
+            appRouter.handleDeepLink(pendingDeepLinkUrl)
+            onDeepLinkConsumed()
+        }
+    }
+
+    // System back pops the selected tab's stack while one exists; at
+    // a root it stays disabled and the activity finishes normally.
+    BackHandler(enabled = appRouter.canGoBack) {
+        appRouter.handleBack()
+    }
+
+    RouteOnAppEvents(appRouter)
 
     NavigationBarScaffold(
-        selectedTabIndex = selectedTabIndex,
-        onTabSelected = { tappedIndex -> selectedTabIndex = tappedIndex },
+        selectedTab = appRouter.selectedTab,
+        onTabSelected = appRouter::selectTab,
         modifier = modifier,
-    ) { currentTabIndex ->
-        when (currentTabIndex) {
-            0 -> HomePage(mainViewModel)
-            else -> SettingsPage(settingsViewModel)
+    ) { tab ->
+        // Exhaustive: a new tab breaks THIS switch at compile time
+        // instead of falling into a silent else.
+        when (tab) {
+            AppTab.HOME -> TabStackHost(
+                tabRouter = appRouter.homeRouter,
+                rootContent = {
+                    HomePage(
+                        mainViewModel = mainViewModel,
+                        onOpenJokeDetail = { jokeId ->
+                            appRouter.homeRouter.push(
+                                HomeDestination.JokeDetail(
+                                    jokeId = jokeId,
+                                ),
+                            )
+                        },
+                    )
+                },
+            ) { destination ->
+                when (destination) {
+                    is HomeDestination.JokeDetail -> JokeDetailPage(
+                        jokeId = destination.jokeId,
+                        onBack = { appRouter.homeRouter.pop() },
+                    )
+                }
+            }
+            AppTab.SETTINGS -> TabStackHost(
+                tabRouter = appRouter.settingsRouter,
+                rootContent = {
+                    SettingsPage(settingsViewModel)
+                },
+            ) {
+                // No pushed Settings screens yet: the first one adds
+                // a destination type and a branch, nothing else.
+            }
         }
     }
 }
 
+/**
+ * The ONLY place bus facts become navigation. Managers and viewmodels
+ * publish FACTS (never destinations, never router calls); this choke
+ * point maps facts to typed navigation, so routing policy lives in
+ * one function. Direct user actions do not come through here: a
+ * page's semantic lambda (onOpenJokeDetail) calls the router via the
+ * shell's wiring above.
+ *
+ * No routed facts exist yet. The SessionComponent design's adoption
+ * step (ARCHITECTURE-SCALING.md section 1) shows the shape a real
+ * fact will take, using listenTo with an explicit owner plus
+ * unsubscribeOwner for deterministic detach:
+ *
+ * ```
+ * val eventManager = LocalEventManager.current
+ * DisposableEffect(eventManager, appRouter) {
+ *     val routingOwner = object {}
+ *     eventManager.listenTo(SessionEnded, routingOwner) {
+ *         appRouter.selectTab(AppTab.HOME)
+ *     }
+ *     onDispose { eventManager.unsubscribeOwner(routingOwner) }
+ * }
+ * ```
+ */
+@Suppress("UNUSED_PARAMETER")
+@Composable
+private fun RouteOnAppEvents(appRouter: AppRouter) = Unit
+
 @Composable
 internal fun NavigationBarScaffold(
-    selectedTabIndex: Int,
-    onTabSelected: (Int) -> Unit,
+    selectedTab: AppTab,
+    onTabSelected: (AppTab) -> Unit,
     modifier: Modifier = Modifier,
-    pageContent: @Composable (Int) -> Unit,
+    pageContent: @Composable (AppTab) -> Unit,
 ) {
-    val tabs = baseNavigationTabs()
     Scaffold(
         modifier = modifier,
         bottomBar = {
             BottomTabBar(
-                tabs = tabs,
-                selectedTabIndex = selectedTabIndex,
+                selectedTab = selectedTab,
                 onTabSelected = onTabSelected,
             )
         },
@@ -125,12 +208,12 @@ internal fun NavigationBarScaffold(
                 .padding(contentPadding)
                 .clipToBounds(),
         ) {
-            tabs.forEachIndexed { tabIndex, _ ->
+            AppTab.entries.forEach { tab ->
                 TabPageContainer(
-                    tabIndex = tabIndex,
-                    selectedTabIndex = selectedTabIndex,
+                    tabIndex = tab.ordinal,
+                    selectedTabIndex = selectedTab.ordinal,
                 ) {
-                    pageContent(tabIndex)
+                    pageContent(tab)
                 }
             }
         }
@@ -144,10 +227,11 @@ internal fun NavigationBarScaffold(
  */
 @Composable
 private fun BottomTabBar(
-    tabs: List<NavigationPage>,
-    selectedTabIndex: Int,
-    onTabSelected: (Int) -> Unit,
+    selectedTab: AppTab,
+    onTabSelected: (AppTab) -> Unit,
 ) {
+    val tabs = AppTab.entries
+    val selectedTabIndex = selectedTab.ordinal
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -188,11 +272,11 @@ private fun BottomTabBar(
             )
 
             Row(modifier = Modifier.fillMaxWidth().selectableGroup()) {
-                tabs.forEachIndexed { tabIndex, tab ->
+                tabs.forEach { tab ->
                     TabBarItem(
-                        tab = tab,
-                        isSelected = tabIndex == selectedTabIndex,
-                        onClick = { onTabSelected(tabIndex) },
+                        tab = tab.toNavigationPage(),
+                        isSelected = tab == selectedTab,
+                        onClick = { onTabSelected(tab) },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -314,17 +398,22 @@ private fun TabPageContainer(
     }
 }
 
-private fun baseNavigationTabs(): List<NavigationPage> = listOf(
-    NavigationPage(name = "Home", icon = Icons.Filled.Home),
-    NavigationPage(name = "Settings", icon = Icons.Filled.Settings),
-)
+// Display data stays a view concern: the router knows tabs, the view
+// knows their names and icons. Exhaustive: a new tab will not compile
+// until it has display data here.
+private fun AppTab.toNavigationPage(): NavigationPage = when (this) {
+    AppTab.HOME ->
+        NavigationPage(name = "Home", icon = Icons.Filled.Home)
+    AppTab.SETTINGS ->
+        NavigationPage(name = "Settings", icon = Icons.Filled.Settings)
+}
 
 @Preview(showBackground = true)
 @Composable
 private fun NavigationBarScaffoldPreview() {
     BaseAppTheme {
         NavigationBarScaffold(
-            selectedTabIndex = 0,
+            selectedTab = AppTab.HOME,
             onTabSelected = {},
         ) {
             Text(text = "Page content")

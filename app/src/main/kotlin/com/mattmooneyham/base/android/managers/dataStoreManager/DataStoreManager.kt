@@ -8,8 +8,10 @@ import com.mattmooneyham.base.android.managers.ConfinedManager
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.eventManager.StateKey
 import com.mattmooneyham.base.android.managers.logManager.LogManager
+import com.mattmooneyham.base.android.util.RetryPolicy
+import com.mattmooneyham.base.android.util.retryForever
+import kotlin.time.Duration
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -54,20 +56,47 @@ class DataStoreManager(
         .distinctUntilChanged()
 
     init {
-        // Publish persisted values through the event bus: the initial read
-        // and every subsequent edit reach listeners as events. The catch is
-        // load-bearing: storage reads CAN fail, and a failure must never
-        // take the collectors down.
+        // Publish persisted values through the event bus: the initial
+        // read and every subsequent edit reach listeners as events. A
+        // read failure must neither take the collector down NOR end
+        // the bridge for the life of the process (Flow.catch would do
+        // exactly that: it terminates the upstream): retryForever
+        // resubscribes with capped backoff, so a transient IO failure
+        // costs a delay, not the feature. Each outage's first failure
+        // logs at ERROR (a counted non-fatal via the telemetry
+        // funnel); repeats log at WARN so a permanently broken disk
+        // cannot spam the crash backend. trigger() is non-throwing by
+        // design, so only storage failures drive the loop.
         managerScope.launch {
-            hasSeenWelcome
-                .catch { throwable ->
-                    logManager.warn(
-                        "hasSeenWelcome stream failed: ${throwable.message}",
-                    )
-                }
-                .collect { hasSeen ->
+            retryForever(
+                policy = RetryPolicy(maxAttempts = null),
+                onRetry = ::reportBridgeFailure,
+            ) { onHealthy ->
+                hasSeenWelcome.collect { hasSeen ->
+                    onHealthy()
                     eventManager.trigger(HasSeenWelcomeChanged, hasSeen)
                 }
+            }
+        }
+    }
+
+    /** First failure per outage at ERROR, repeats at WARN. */
+    private fun reportBridgeFailure(
+        attempt: Int,
+        streamFailure: Throwable,
+        nextDelay: Duration,
+    ) {
+        if (attempt == 1) {
+            logManager.error(
+                "hasSeenWelcome bridge failed; resubscribing in " +
+                    "$nextDelay",
+                throwable = streamFailure,
+            )
+        } else {
+            logManager.warn(
+                "hasSeenWelcome bridge failed again " +
+                    "(attempt $attempt); resubscribing in $nextDelay",
+            )
         }
     }
 
@@ -85,8 +114,11 @@ class DataStoreManager(
         }.onSuccess {
             logManager.debug("hasSeenWelcome set to $value")
         }.onFailure { writeFailure ->
+            // The throwable rides along so the ERROR prints its stack
+            // trace and the telemetry funnel counts the real failure.
             logManager.error(
                 "hasSeenWelcome write failed: ${writeFailure.message}",
+                throwable = writeFailure,
             )
         }
     }
@@ -100,6 +132,7 @@ class DataStoreManager(
         }.onFailure { writeFailure ->
             logManager.error(
                 "hasSeenWelcome clear failed: ${writeFailure.message}",
+                throwable = writeFailure,
             )
         }
     }

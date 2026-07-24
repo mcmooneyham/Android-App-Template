@@ -4,6 +4,7 @@ import com.mattmooneyham.base.android.managers.eventManager.EventLifetime
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.eventManager.SignalKey
 import com.mattmooneyham.base.android.managers.eventManager.StateKey
+import com.mattmooneyham.base.android.testkit.awaitTrue
 import java.lang.ref.Reference
 import java.lang.ref.WeakReference
 import kotlinx.coroutines.Dispatchers
@@ -14,6 +15,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -192,6 +194,37 @@ class EventManagerContractSpec {
         Reference.reachabilityFence(keptOwner)
     }
 
+    @Test
+    fun `a receiver-style listener does not pin its owner`() {
+        val ownerRef = subscribeWithReceiverOnlyOwner()
+
+        // The callback reaches the owner only through the receiver,
+        // so nothing strong survives in the closure and the safety
+        // net actually fires.
+        awaitTrue("the receiver-style owner is garbage collected") {
+            System.gc()
+            ownerRef.get() == null
+        }
+    }
+
+    @Test
+    fun `a capturing listener pins its owner until unsubscribed`() {
+        val receivedPayloads = mutableListOf<String>()
+        val ownerRef = subscribeWithCapturedOwner(receivedPayloads)
+
+        // Honest documentation of the limit: a callback that CAPTURES
+        // its owner keeps it strongly reachable, so auto-removal never
+        // fires and deterministic teardown is required.
+        repeat(3) { System.gc() }
+        assertNotNull(ownerRef.get())
+
+        eventManager.unsubscribeOwner(ownerRef.get()!!)
+        awaitTrue("unsubscribeOwner releases the captured owner") {
+            System.gc()
+            ownerRef.get() == null
+        }
+    }
+
     /**
      * Registers a listener whose owner is unreachable once this method
      * returns; only a WeakReference escapes, so the JVM may collect
@@ -204,20 +237,33 @@ class EventManagerContractSpec {
         return WeakReference(disposableOwner)
     }
 
+    private class ReceiverOnlyOwner {
+        var deliveryCount = 0
+    }
+
+    /** The idiomatic shape: the callback touches the owner ONLY via
+     * the receiver, so the closure holds nothing strong. */
+    private fun subscribeWithReceiverOnlyOwner():
+        WeakReference<ReceiverOnlyOwner> {
+        val receiverOwner = ReceiverOnlyOwner()
+        eventManager.listenTo(TestGreetingChanged, receiverOwner) { _ ->
+            deliveryCount += 1
+        }
+        return WeakReference(receiverOwner)
+    }
+
+    /** The hazardous shape: the closure names `capturedOwner`, which
+     * pins it for the collector's lifetime. */
+    private fun subscribeWithCapturedOwner(
+        receivedPayloads: MutableList<String>,
+    ): WeakReference<Any> {
+        val capturedOwner = Any()
+        eventManager.listenTo(TestGreetingChanged, capturedOwner) { greeting ->
+            receivedPayloads += "$greeting seen by $capturedOwner"
+        }
+        return WeakReference(capturedOwner)
+    }
+
     /** Racy size read; only ever used inside polling assertions. */
     private fun registrationCount(): Int = eventManager.registrations.size
-
-    /** Polls [condition] in real time; fails after [timeoutMillis]. */
-    private fun awaitTrue(
-        description: String,
-        timeoutMillis: Long = 10_000,
-        condition: () -> Boolean,
-    ) {
-        val deadlineMillis = System.currentTimeMillis() + timeoutMillis
-        while (System.currentTimeMillis() < deadlineMillis) {
-            if (condition()) return
-            Thread.sleep(25)
-        }
-        throw AssertionError("Timed out waiting until: $description")
-    }
 }

@@ -1,9 +1,12 @@
 package com.mattmooneyham.base.android.managers.logManager
 
 import com.mattmooneyham.base.android.constants.LogLevel
+import com.mattmooneyham.base.android.di.CrashReporter
+import com.mattmooneyham.base.android.di.NoOpCrashReporter
 import com.mattmooneyham.base.android.managers.ConfinedManager
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.eventManager.SignalKey
+import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Clock
@@ -23,6 +26,29 @@ import okio.use
 // Signal: the log history was cleared. Does not replay, so late
 // subscribers never observe a stale "cleared" notification.
 object LogsCleared : SignalKey(eventName = "log.Cleared")
+
+/**
+ * File-side policy for the [LogManager], grouped into one value so
+ * the constructor stays within the composition root's five-parameter
+ * budget with the telemetry seam aboard.
+ */
+data class LogFileSettings(
+    val directoryPath: String?,
+    val fileName: String = LogManager.DEFAULT_LOG_FILE_NAME,
+    val maxFileSizeBytes: Long = LogManager.DEFAULT_MAX_LOG_FILE_BYTES,
+    val fileLoggingEnabled: Boolean = true,
+)
+
+/**
+ * Synthesized for ERROR lines logged without a Throwable, so the
+ * crash backend still receives a countable non-fatal. Its one-frame
+ * stack points at the LOGGING CALL SITE, keeping backend issue
+ * grouping per call site instead of one bucket for every
+ * message-only error.
+ */
+class LoggedError internal constructor(
+    logLine: String,
+) : RuntimeException(logLine)
 
 /**
  * Central logging entry point for the whole app. Every line
@@ -48,9 +74,19 @@ object LogsCleared : SignalKey(eventName = "log.Cleared")
  * the writer when determinism is needed, e.g. in tests). Two
  * exceptions to the async rule, both in service of crash forensics:
  * ERROR-level lines drain the write queue synchronously before the
- * logging call returns (an error is exactly the line a post-mortem
- * needs on disk), and [flushForCrash] lets a dying process make the
- * same best-effort drain from any thread.
+ * logging call returns, BOUNDED at [ERROR_DRAIN_COMMAND_LIMIT]
+ * commands so a full queue can never stall the calling thread (often
+ * Main) into an ANR; with more queued ahead, the background writer
+ * lands the line moments later instead. [flushForCrash] keeps the
+ * UNBOUNDED drain for a dying process, which has no UI to freeze.
+ *
+ * TELEMETRY FUNNEL: the manager also holds the [CrashReporter] seam.
+ * Every accepted ERROR line is forwarded to
+ * [CrashReporter.recordNonFatal] (the attached throwable, or a
+ * call-site-stamped [LoggedError]); every accepted WARN/ERROR line
+ * and every [breadcrumb] joins the backend's bounded breadcrumb
+ * ring, so production crash reports carry the recent history even
+ * though release builds keep DEBUG traces out of the file.
  *
  * The log file rotates by size: when it reaches
  * [maxLogFileSizeBytes], it is renamed with a `.1` inserted before
@@ -61,20 +97,20 @@ object LogsCleared : SignalKey(eventName = "log.Cleared")
  * Provided as a singleton via
  * [com.mattmooneyham.base.android.di.AppComponent].
  *
+ * @param fileSettings file-side policy (directory, name, rotation
+ *   cap, on/off switch), grouped so the wiring stays within budget.
  * @param clock source of wall time for line timestamps; injected so
  *   tests can pin time and assert exact lines.
- * @param maxLogFileSizeBytes rotation threshold, configurable via
- *   AppConfig.
+ * @param crashReporter the telemetry seam (see the class KDoc);
+ *   defaults to the no-op reporter.
  */
 @OptIn(ExperimentalAtomicApi::class)
 class LogManager(
-    private val logDirectoryPath: String?,
-    private val logFileName: String = DEFAULT_LOG_FILE_NAME,
+    fileSettings: LogFileSettings,
     private val minimumLogLevel: LogLevel = LogLevel.DEBUG,
-    private val fileLoggingEnabled: Boolean = true,
     private val eventManager: EventManager? = null,
     private val clock: Clock = Clock.System,
-    private val maxLogFileSizeBytes: Long = DEFAULT_MAX_LOG_FILE_BYTES,
+    private val crashReporter: CrashReporter = NoOpCrashReporter,
 ) : ConfinedManager(
     managerName = "LogManager",
     // The logger cannot report its own rails failures through itself
@@ -82,6 +118,11 @@ class LogManager(
     // runCatching, so anything reaching the handler is dropped quietly.
     failureLogManager = null,
 ) {
+
+    private val logDirectoryPath = fileSettings.directoryPath
+    private val logFileName = fileSettings.fileName
+    private val fileLoggingEnabled = fileSettings.fileLoggingEnabled
+    private val maxLogFileSizeBytes = fileSettings.maxFileSizeBytes
 
     private sealed interface LogFileCommand {
         data class Append(val line: String) : LogFileCommand
@@ -98,6 +139,13 @@ class LogManager(
         Channel<LogFileCommand>(capacity = WRITER_BUFFER_CAPACITY)
 
     private val droppedLineCount = AtomicInt(0)
+
+    // Write-failure accounting: the count folds into an honest marker
+    // on the next successful append; the once-per-process flag keeps a
+    // full disk from spamming the crash backend (one non-fatal is
+    // signal, five hundred are noise).
+    private val fileWriteFailureCount = AtomicInt(0)
+    private val hasReportedWriteFailure = AtomicBoolean(false)
 
     // Serializes all file access between the background writer and the
     // synchronous drain paths (ERROR flush, flushForCrash), so lines
@@ -127,11 +175,21 @@ class LogManager(
         when (command) {
             is LogFileCommand.Append -> {
                 val droppedLines = droppedLineCount.exchange(0)
+                val failedWrites = fileWriteFailureCount.exchange(0)
                 synchronized(fileAccessLock) {
                     if (droppedLines > 0) {
                         appendToLogFile(
                             "[LogManager] $droppedLines log " +
                                 "line(s) dropped under burst",
+                        )
+                    }
+                    // The export shows its own gaps: if this marker
+                    // write fails too, the count re-accumulates.
+                    if (failedWrites > 0) {
+                        appendToLogFile(
+                            "[LogManager] $failedWrites file " +
+                                "write(s) failed since the last " +
+                                "successful append",
                         )
                     }
                     appendToLogFile(command.line)
@@ -174,6 +232,35 @@ class LogManager(
         throwable: Throwable? = null,
     ) = log(LogLevel.ERROR, message, tag, throwable)
 
+    /**
+     * Logs a crash the CrashReporter has ALREADY recorded as fatal:
+     * identical ERROR formatting and drain policy, but never
+     * forwarded to recordNonFatal, so a crash is counted exactly once
+     * upstream. Only the AppComponent's uncaught-exception handler
+     * calls this.
+     */
+    fun logFatal(message: String, throwable: Throwable) = log(
+        LogLevel.ERROR,
+        message,
+        explicitTag = null,
+        throwable = throwable,
+        forwardAsNonFatal = false,
+    )
+
+    /**
+     * Crash-context trace: ALWAYS forwarded to the CrashReporter's
+     * bounded breadcrumb ring, and also logged at DEBUG when the
+     * minimum level admits it, so debug builds keep their full file
+     * trace. Below the DEBUG threshold the forward is the ONLY work:
+     * no stack walk, no line formatting. Callers pass pre-sanitized
+     * messages (EventManager.describePayload never prints string
+     * contents).
+     */
+    fun breadcrumb(message: String, tag: String? = null) {
+        runCatching { crashReporter.recordBreadcrumb(message) }
+        log(LogLevel.DEBUG, message, tag, throwable = null)
+    }
+
     /** Absolute path of the log file, or null while file logging is off. */
     val logFilePath: String?
         get() {
@@ -193,6 +280,58 @@ class LogManager(
             if (!FileSystem.SYSTEM.exists(filePath)) null
             else FileSystem.SYSTEM.read(filePath) { readUtf8() }
         }.getOrNull() ?: ""
+    }
+
+    /**
+     * Writes a quiescent snapshot of the FULL log history (rotated
+     * file first, then the live file: oldest lines first) to a
+     * dedicated export file beside the live log and returns its
+     * absolute path. Flushes the writer first, so every line logged
+     * before the call is included; the copy runs under the file
+     * lock, so it can never observe a half-rotated state. Returns
+     * null when file logging is off or nothing has been logged yet.
+     * Overwritten on each call; deleted by [clearLogs] with the rest
+     * of the history.
+     */
+    suspend fun writeExportSnapshot(): String? {
+        val livePath = logFilePath ?: return null
+        flush()
+        return onIo {
+            synchronized(fileAccessLock) {
+                runCatching {
+                    val sourcePaths = historyFilePaths(livePath)
+                    if (sourcePaths.isEmpty()) {
+                        return@runCatching null
+                    }
+                    val exportPath = exportLogFilePath(livePath)
+                    FileSystem.SYSTEM.write(exportPath.toPath()) {
+                        sourcePaths.forEach { historyPath ->
+                            FileSystem.SYSTEM.source(historyPath)
+                                .use { historySource ->
+                                    writeAll(historySource)
+                                }
+                        }
+                    }
+                    exportPath
+                }.getOrNull()
+            }
+        }
+    }
+
+    /** Rotated-then-live, existing files only: oldest lines first. */
+    private fun historyFilePaths(livePath: String) =
+        listOfNotNull(rotatedLogFilePath, livePath)
+            .map { pathString -> pathString.toPath() }
+            .filter { path -> FileSystem.SYSTEM.exists(path) }
+
+    /** "base-app.log" exports as "base-app-export.log". */
+    private fun exportLogFilePath(livePath: String): String {
+        val extension = livePath.substringAfterLast('.', "")
+        return if (extension.isEmpty()) {
+            "$livePath-export"
+        } else {
+            livePath.substringBeforeLast('.') + "-export." + extension
+        }
     }
 
     /**
@@ -249,16 +388,21 @@ class LogManager(
 
     /**
      * Steals queued commands from the channel and executes them
-     * synchronously. Racing the background writer is safe: the channel
-     * delivers each command to exactly one consumer and file access is
-     * locked.
+     * synchronously, up to [maxCommandCount]. Racing the background
+     * writer is safe: the channel delivers each command to exactly
+     * one consumer and file access is locked. Internal so the spec
+     * can pin the bound directly.
      */
-    private fun drainPendingFileCommands() {
+    internal fun drainPendingFileCommands(
+        maxCommandCount: Int = Int.MAX_VALUE,
+    ) {
         runCatching {
-            while (true) {
+            var executedCommandCount = 0
+            while (executedCommandCount < maxCommandCount) {
                 val command =
                     fileCommands.tryReceive().getOrNull() ?: break
                 executeFileCommand(command)
+                executedCommandCount += 1
             }
         }
     }
@@ -279,6 +423,7 @@ class LogManager(
         message: String,
         explicitTag: String?,
         throwable: Throwable?,
+        forwardAsNonFatal: Boolean = true,
     ) {
         if (level.priority < minimumLogLevel.priority) return
 
@@ -289,6 +434,24 @@ class LogManager(
         // Guarded like the file write: "logging never throws" includes
         // Logcat, whose android.util.Log stub throws in JVM unit tests.
         runCatching { writeToLogcat(level, tag, logLine, throwable) }
+        // Accepted WARN and ERROR lines join the crash report's
+        // bounded breadcrumb ring: the warning trail leading up to a
+        // crash. Guarded: a broken reporter must never make "logging
+        // never throws" a lie.
+        if (level.priority >= LogLevel.WARN.priority) {
+            runCatching { crashReporter.recordBreadcrumb(logLine) }
+        }
+        // An ERROR line IS a non-fatal: the attached throwable when
+        // present, a call-site-stamped LoggedError otherwise, so every
+        // handled-but-serious failure is counted in the crash backend.
+        // logFatal() opts out: its crash was already recorded as fatal.
+        if (level == LogLevel.ERROR && forwardAsNonFatal) {
+            runCatching {
+                crashReporter.recordNonFatal(
+                    throwable ?: buildLoggedError(logLine, callSite),
+                )
+            }
+        }
         if (fileLoggingEnabled && logFilePath != null) {
             val enqueued = fileCommands.trySend(
                 LogFileCommand.Append(
@@ -301,14 +464,39 @@ class LogManager(
             // gap.
             if (enqueued.isFailure) droppedLineCount.fetchAndAdd(1)
             // Flush policy: ERROR lines reach disk before this call
-            // returns. Best-effort: a command the background writer
-            // already claimed (possibly this very line, if the writer
-            // was parked on the channel) is written by the writer
-            // shortly after instead. Errors precede crashes often
-            // enough that leaving them queued risks losing exactly the
-            // evidence a post-mortem needs.
-            if (level == LogLevel.ERROR) drainPendingFileCommands()
+            // returns WHEN fewer than the limit of commands are queued
+            // ahead (the common near-empty case: the fresh error line
+            // is the tail, so it is usually reached); otherwise the
+            // background writer lands it moments later. The bound
+            // keeps a full 512-command queue from stalling the calling
+            // thread, often Main, into an ANR; a genuine crash still
+            // gets the unbounded drain via flushForCrash.
+            if (level == LogLevel.ERROR) {
+                drainPendingFileCommands(
+                    maxCommandCount = ERROR_DRAIN_COMMAND_LIMIT,
+                )
+            }
         }
+    }
+
+    /** Builds the synthesized non-fatal for message-only ERROR lines;
+     * see [LoggedError]. */
+    private fun buildLoggedError(
+        logLine: String,
+        callSite: CallSite?,
+    ): LoggedError {
+        val loggedError = LoggedError(logLine)
+        if (callSite != null) {
+            loggedError.stackTrace = arrayOf(
+                StackTraceElement(
+                    callSite.className ?: "UnknownClass",
+                    callSite.methodName ?: "unknownMethod",
+                    callSite.fileName,
+                    callSite.lineNumber ?: -1,
+                ),
+            )
+        }
+        return loggedError
     }
 
     /** Assembles the fixed-width, pipe-separated log columns. */
@@ -359,6 +547,35 @@ class LogManager(
                 .appendingSink(path.toPath(), mustExist = false)
                 .buffer()
                 .use { sink -> sink.writeUtf8(logLine + "\n") }
+        }.onFailure { writeFailure ->
+            recordFileWriteFailure(writeFailure)
+        }
+    }
+
+    /**
+     * A failed file write reports through the channels that still
+     * work: Logcat immediately, and the crash backend ONCE per
+     * process (a full disk fails every append; one non-fatal is
+     * signal). The running count becomes an honest marker line on
+     * the next successful append (see [executeFileCommand]), so an
+     * exported log shows its own gaps.
+     */
+    private fun recordFileWriteFailure(writeFailure: Throwable) {
+        fileWriteFailureCount.fetchAndAdd(1)
+        runCatching {
+            writeToLogcat(
+                LogLevel.ERROR,
+                "LogManager",
+                "Log file write failed: ${writeFailure.message}",
+                writeFailure,
+            )
+        }
+        if (hasReportedWriteFailure.compareAndSet(
+                expectedValue = false,
+                newValue = true,
+            )
+        ) {
+            runCatching { crashReporter.recordNonFatal(writeFailure) }
         }
     }
 
@@ -398,9 +615,27 @@ class LogManager(
                     mustExist = false,
                 )
             }
+            // "Clear logs" clears ALL of it, the export copy too.
+            FileSystem.SYSTEM.delete(
+                exportLogFilePath(path).toPath(),
+                mustExist = false,
+            )
             FileSystem.SYSTEM.delete(path.toPath(), mustExist = false)
             true
-        }.getOrDefault(false)
+        }.getOrElse { deleteFailure ->
+            // A failed clear must not be invisible: the file cannot
+            // carry the report, so Logcat does.
+            runCatching {
+                writeToLogcat(
+                    LogLevel.ERROR,
+                    "LogManager",
+                    "Log history delete failed: " +
+                        "${deleteFailure.message}",
+                    deleteFailure,
+                )
+            }
+            false
+        }
     }
 
     private fun currentUtcTimestamp(): String = clock.now()
@@ -415,6 +650,12 @@ class LogManager(
         const val DEFAULT_MAX_LOG_FILE_BYTES = 512L * 1024L
         private const val DEFAULT_TAG = "App"
         private const val WRITER_BUFFER_CAPACITY = 512
+
+        // Bounds the synchronous ERROR-level drain: ample for the
+        // common near-empty queue, small enough that a full
+        // 512-command queue can never stall the calling thread into
+        // an ANR. flushForCrash keeps the unbounded drain.
+        internal const val ERROR_DRAIN_COMMAND_LIMIT = 64
 
         // Fixed widths keep the pipe-separated columns aligned
         // across lines, so the file scans like a table.

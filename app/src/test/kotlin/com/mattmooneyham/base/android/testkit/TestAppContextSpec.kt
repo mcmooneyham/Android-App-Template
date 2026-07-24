@@ -66,4 +66,25 @@ class TestAppContextSpec {
         assertTrue(app.connectivityMonitor.isStopped)
         assertFalse(app.filesDirectory.exists())
     }
+
+    @Test
+    fun `constructing the component performs no network IO`() {
+        // The behavioral fence for the init budget: every manager's
+        // HTTP rides the one MockEngine seam, so ANY constructor that
+        // sneaks in a fetch fails this, whatever the call is named.
+        val app = TestAppContext(jokeApi = jokeApi, autoStart = false)
+        testContext = app
+
+        assertEquals(
+            "Construction must not fetch; first IO belongs to " +
+                "start() (see the init budget in ConfinedManager)",
+            0,
+            jokeApi.requestCount,
+        )
+
+        app.component.start()
+        awaitTrue("the first fetch happens on start") {
+            jokeApi.requestCount == 1
+        }
+    }
 }

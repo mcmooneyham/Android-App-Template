@@ -3,10 +3,12 @@ package com.mattmooneyham.base.android.di
 import com.mattmooneyham.base.android.api.createDefaultJson
 import com.mattmooneyham.base.android.managers.dataStoreManager.DATA_STORE_FILE_NAME
 import com.mattmooneyham.base.android.managers.dataStoreManager.DataStoreManager
+import com.mattmooneyham.base.android.managers.ConfinedManager
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.featureFlagManager.AppFlags
 import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagManager
 import com.mattmooneyham.base.android.managers.JokeManager
+import com.mattmooneyham.base.android.managers.logManager.LogFileSettings
 import com.mattmooneyham.base.android.managers.logManager.LogManager
 import com.mattmooneyham.base.android.managers.connectivityManager.NetworkManager
 import com.mattmooneyham.base.android.managers.dataStoreManager.createDataStoreScope
@@ -33,20 +35,66 @@ import kotlinx.serialization.json.Json
  *   inject the component itself into a manager.
  * - The one sanctioned setter cycle is [EventManager.attachLogManager],
  *   called in the init block below; add no others.
+ * - Every member registers its own teardown BESIDE its declaration
+ *   ([closedBy] for plain resources, [registered] for managers), so
+ *   close-mirrors-construction is true by construction and [close] is
+ *   never edited by feature PRs.
+ * - Feature managers are APPENDED at the end of their marked region;
+ *   they may depend on the infrastructure tier (bus, logging, flags,
+ *   httpClient) but never on each other: cross-feature conversation
+ *   rides published events. Two concurrent feature PRs therefore
+ *   merge as trivially adjacent additions.
+ * - Construction performs no network IO (the init budget in the
+ *   ConfinedManager KDoc); first fetches run in [start], which
+ *   BaseApplication calls right after construction.
  */
 class AppComponent(config: AppConfig) {
 
     private val constructionStart = TimeSource.Monotonic.markNow()
 
+    // Teardown steps in REVERSE construction order: each member
+    // records its own step beside its declaration via closedBy or
+    // registered, and addFirst keeps the list mirrored for free.
+    // close() walks it; no hand-maintained ordering exists.
+    private val teardownSteps = ArrayDeque<() -> Unit>()
+
+    /** Registers the teardown for a non-manager resource (a scope,
+     * the HTTP engine) beside its declaration. */
+    private fun <ResourceType> ResourceType.closedBy(
+        releaseResource: (ResourceType) -> Unit,
+    ): ResourceType {
+        teardownSteps.addFirst { releaseResource(this) }
+        return this
+    }
+
+    // Managers in construction order, walked by start().
+    private val managersInConstructionOrder =
+        mutableListOf<ConfinedManager>()
+
+    /** Registers a manager's start order AND teardown at once. */
+    private fun <ManagerType : ConfinedManager>
+    ManagerType.registered(): ManagerType {
+        managersInConstructionOrder += this
+        val manager = this
+        teardownSteps.addFirst { manager.close() }
+        return this
+    }
+
+    // ---- Infrastructure tier (fixed; edit rarely) -----------------
+
     val eventManager = EventManager()
+        .closedBy { bus -> bus.close() }
 
     val logManager = LogManager(
-        logDirectoryPath = config.appFilesDirectory.absolutePath,
+        fileSettings = LogFileSettings(
+            directoryPath = config.appFilesDirectory.absolutePath,
+            maxFileSizeBytes = config.maxLogFileSizeBytes,
+        ),
         minimumLogLevel = config.minimumLogLevel,
         eventManager = eventManager,
         clock = config.clock,
-        maxLogFileSizeBytes = config.maxLogFileSizeBytes,
-    )
+        crashReporter = config.crashReporter,
+    ).registered()
 
     init {
         // The one sanctioned cycle: the bus needs the logger for trigger
@@ -62,11 +110,12 @@ class AppComponent(config: AppConfig) {
         // monitor, tests inject a fake. The component itself never
         // touches Android connectivity types.
         connectivityMonitor = config.connectivityMonitor,
-    )
+    ).registered()
 
     // Held here, not inside the factory, so close() can cancel the
     // DataStore's IO work; the manager itself never sees this scope.
     private val dataStoreScope = createDataStoreScope()
+        .closedBy { scope -> scope.cancel() }
 
     val dataStoreManager = DataStoreManager(
         dataStore = createPreferencesDataStore(
@@ -77,7 +126,7 @@ class AppComponent(config: AppConfig) {
         ),
         eventManager = eventManager,
         logManager = logManager,
-    )
+    ).registered()
 
     // Debug-only flag-override storage: when disabled (release), the
     // scope and store are never created, so the build is structurally
@@ -86,7 +135,7 @@ class AppComponent(config: AppConfig) {
     // file, and the app's preference store belongs to DataStoreManager.
     private val flagOverridesScope =
         if (config.featureFlagOverridesEnabled) {
-            createDataStoreScope()
+            createDataStoreScope().closedBy { scope -> scope.cancel() }
         } else {
             null
         }
@@ -107,7 +156,7 @@ class AppComponent(config: AppConfig) {
         provider = config.featureFlagProvider,
         eventManager = eventManager,
         logManager = logManager,
-    )
+    ).registered()
 
     val json: Json = createDefaultJson()
 
@@ -117,13 +166,19 @@ class AppComponent(config: AppConfig) {
     // the component owns the engine so close() shuts it down once,
     // however many clients wrap it.
     val httpClient: HttpClient = config.httpClientFactory(json)
+        .closedBy { client -> client.close() }
+
+    // ---- Feature managers (APPEND ONLY: one contiguous block per
+    //      manager, added at the END of this region) -----------------
 
     val jokeManager = JokeManager(
         httpClient = httpClient,
         logManager = logManager,
         eventManager = eventManager,
         featureFlagManager = featureFlagManager,
-    )
+    ).registered()
+
+    // ---- Crash handler (fixed; stays last) -------------------------
 
     // Crash safety: the handler below chains in FRONT of whatever was
     // installed (typically the platform's process-killing handler),
@@ -137,7 +192,10 @@ class AppComponent(config: AppConfig) {
         Thread.UncaughtExceptionHandler { thread, throwable ->
             runCatching { config.crashReporter.recordFatal(throwable) }
             runCatching {
-                logManager.error(
+                // logFatal, not error: recordFatal above already
+                // counted this crash; the funnel must not count it
+                // again as a non-fatal.
+                logManager.logFatal(
                     "Uncaught exception on thread ${thread.name}",
                     throwable = throwable,
                 )
@@ -158,10 +216,28 @@ class AppComponent(config: AppConfig) {
     }
 
     /**
-     * Tears the component down in REVERSE construction order. The
-     * event-bus scope is cancelled LAST, so events triggered by earlier
-     * teardown steps can still deliver. A closed component cannot be
-     * reused; construct a new one (which tests do per test).
+     * Starts every manager in construction order, running the
+     * post-construction side effects (first fetches, warmups) the
+     * init budget keeps out of constructors. BaseApplication calls
+     * this immediately after construction today; when a measured
+     * cold start attributes real cost here, this single call is what
+     * moves behind the first frame, and the lazy-tier plan in
+     * ARCHITECTURE-SCALING.md tiers it further. Managers see at most
+     * one start() per component.
+     */
+    fun start() {
+        managersInConstructionOrder.forEach { manager ->
+            manager.start()
+        }
+    }
+
+    /**
+     * Tears the component down in REVERSE construction order by
+     * walking the self-registered [teardownSteps]; the mirror is
+     * structural, never hand-maintained. The event-bus scope is
+     * cancelled LAST, so events triggered by earlier teardown steps
+     * can still deliver. A closed component cannot be reused;
+     * construct a new one (which tests do per test).
      */
     fun close() {
         // Uninstall the crash handler first so a crash during or after
@@ -174,14 +250,10 @@ class AppComponent(config: AppConfig) {
                 previousUncaughtExceptionHandler,
             )
         }
-        jokeManager.close()
-        httpClient.close()
-        featureFlagManager.close()
-        flagOverridesScope?.cancel()
-        dataStoreManager.close()
-        dataStoreScope.cancel()
-        networkManager.close()
-        logManager.close()
-        eventManager.close()
+        // Guarded per step: one throwing teardown must not strand the
+        // members constructed before it.
+        teardownSteps.forEach { teardownStep ->
+            runCatching { teardownStep() }
+        }
     }
 }

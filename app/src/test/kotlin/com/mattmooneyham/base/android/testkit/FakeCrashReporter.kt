@@ -11,6 +11,7 @@ class FakeCrashReporter : CrashReporter {
 
     val recordedNonFatals = mutableListOf<Throwable>()
     val recordedFatals = mutableListOf<Throwable>()
+    val recordedBreadcrumbs = mutableListOf<String>()
 
     override fun recordNonFatal(throwable: Throwable) {
         recordedNonFatals += throwable
@@ -18,5 +19,9 @@ class FakeCrashReporter : CrashReporter {
 
     override fun recordFatal(throwable: Throwable) {
         recordedFatals += throwable
+    }
+
+    override fun recordBreadcrumb(message: String) {
+        recordedBreadcrumbs += message
     }
 }

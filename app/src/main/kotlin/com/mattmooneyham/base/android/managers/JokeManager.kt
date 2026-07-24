@@ -53,7 +53,8 @@ data class JokeState(
 /**
  * Owns the demo joke feature, following the app's event-driven manager
  * convention: the manager fetches and publishes; everything else just
- * listens. It loads the first joke eagerly at initialization, so the UI
+ * listens. It loads the first joke eagerly in [start] (never in init:
+ * the init budget keeps network IO out of construction), so the UI
  * never has to ask for data, only for refreshes.
  *
  * Publishes a single event, [JokeStateChanged], whose [JokeState]
@@ -115,17 +116,28 @@ class JokeManager(
     private var lastObservedConnectivity: Boolean? = null
 
     init {
-        refreshJoke()
+        // Construction subscribes but performs no IO; the first fetch
+        // happens in start(), per the init budget (ConfinedManager).
         // Canonical cross-manager subscription (see the class KDoc):
         // owner = this ties the subscription to the manager's lifetime;
         // the callback arrives on Main, so the reaction hops onto the
-        // manager's own confinement before touching state.
+        // manager's own confinement before touching state. The
+        // load-bearing detail: inside the lambda, managerScope and
+        // reactToConnectivity resolve against the RECEIVER (the weakly
+        // held owner), not a captured this, so the callback itself
+        // never pins the manager; a strong reference exists only while
+        // a delivery runs.
         eventManager.listenTo(
             NetworkConnectivityChanged,
             owner = this,
         ) { isConnected ->
             managerScope.launch { reactToConnectivity(isConnected) }
         }
+    }
+
+    /** Eager first load; the UI still only ever asks for refreshes. */
+    override fun start() {
+        refreshJoke()
     }
 
     /**

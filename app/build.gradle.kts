@@ -26,6 +26,10 @@ dependencies {
     debugImplementation(libs.compose.uiTooling)
 
     implementation(libs.androidx.activity.compose)
+    // FileProvider for the log-export share (declared explicitly:
+    // relying on a transitive edge for a manifest-declared class is
+    // fragile).
+    implementation(libs.androidx.core)
 
     // Manager/API layer (managers, api, constants packages).
     implementation(libs.kotlinx.coroutines.core)

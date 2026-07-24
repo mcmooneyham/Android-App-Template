@@ -39,7 +39,12 @@ AppComponent (di/) .............. plain class, manual constructor
 AppModule (Hilt) ................ thin adapter exposing the component's
      |                            members to @Inject sites
      v
-MainActivity .................... provides LocalEventManager
+MainActivity .................... provides LocalEventManager; deep
+     |                            links arrive as plain strings
+     |-- navigation/ ............ AppRouter: typed destinations,
+     |                            per-tab back stacks, ONE deep-link
+     |                            mapper; JSON-saved across process
+     |                            death
      |-- views/ ................. observe events directly via
      |                            eventState / eventStateOrNull
      |-- viewModels/ ............ thin: user actions and writes only
@@ -65,12 +70,19 @@ viewmodels forward user actions back to managers.
   on the template add services by adding clients, never by widening a
   global URL.
 - `AppComponent` is a plain class: property initializers run top to
-  bottom, so declaration order IS the construction order. It also
-  installs a `Thread` default uncaught-exception handler that reports
-  the fatal to the `CrashReporter`, logs it, drains the log queue to
-  disk (`flushForCrash`), and then delegates to the previous handler.
-  `close()` tears down in reverse construction order, cancelling the
-  event bus LAST so teardown events still deliver.
+  bottom, so declaration order IS the construction order. Every
+  member registers its own teardown BESIDE its declaration
+  (`closedBy` for resources, `registered()` for managers), so
+  `close()` just walks the self-mirrored registry in reverse
+  construction order, cancelling the event bus LAST so teardown
+  events still deliver; feature PRs never edit `close()`. The
+  component also installs a `Thread` default uncaught-exception
+  handler that reports the fatal to the `CrashReporter`, logs it
+  (`logFatal`, so the crash is never double-counted), drains the log
+  queue to disk (`flushForCrash`), and delegates to the previous
+  handler. `start()` runs every manager's post-construction side
+  effects in construction order; BaseApplication calls it right
+  after construction.
 - `BaseApplication.onCreate` is the only Android edge: it builds every
   platform-touching value (typed `File`, `AndroidConnectivityMonitor`,
   debug-vs-release log level from `BuildConfig.DEBUG`) and constructs
@@ -86,11 +98,22 @@ the source of truth):
 1. Construction order is bus, logging, then peer managers.
 2. Managers receive only what they use, by constructor, within a
    budget of five parameters (a bus handle counts as one). A manager
-   that needs more is doing too much: split it.
+   that needs more is doing too much: split it (or group a policy
+   value the way `LogFileSettings` does).
 3. Never inject the component itself into a manager.
 4. The one sanctioned setter cycle is
    `eventManager.attachLogManager(logManager)`, called in the
    component's init block. Add no others.
+5. Feature managers APPEND at the end of their marked region and may
+   depend on the infrastructure tier (bus, logging, flags,
+   httpClient) but never on each other: cross-feature conversation
+   rides published events, so concurrent feature PRs merge as
+   trivially adjacent additions.
+6. THE INIT BUDGET: construction may allocate, subscribe, and
+   register cheap callbacks; it must NOT issue network requests or
+   any unbounded-latency work. First fetches belong in the manager's
+   `start()`, and a guard test fails any constructor that fetches
+   (zero MockEngine requests before `component.start()`).
 
 ### The event contract
 
@@ -133,11 +156,15 @@ The contract every publisher and subscriber can rely on:
 - Publish-time validation: a payload whose runtime type contradicts
   the key is rejected and logged, never delivered (a backstop for the
   type-erased paths; typed paths do not compile when wrong).
-- Weak-owner lifecycle: `listenTo(key, owner) { ... }` ties the
-  subscription to `owner`'s lifetime; there is no unsubscribe
-  boilerplate, dead owners are swept automatically, and
-  `unsubscribeOwner(owner)` detaches immediately when teardown must be
-  deterministic (session end, tests).
+- Owner lifecycle: `listenTo(key, owner) { ... }` runs the callback
+  WITH THE OWNER AS RECEIVER while the bus holds the owner weakly.
+  Reach the owner only through the receiver (pass lambda literals;
+  when the owner is not `this`, enclosing members need an explicit
+  `this@Outer`) and the subscription dies with it. A callback that
+  CAPTURES the owner pins it, so deterministic teardown is the
+  PRIMARY contract: ViewModels call `unsubscribeOwner` in onCleared,
+  sessions in their teardown, and managers simply rely on the bus
+  dying with the component; auto-removal is the safety net.
 - Ordering (the five rules, from the `EventManager` KDoc): delivery
   order ACROSS keys is unspecified; per-key delivery is in trigger
   order; UI listeners always run on the main dispatcher; a listener
@@ -169,7 +196,20 @@ concurrency rails (`managers/ConfinedManager.kt`):
   load-bearing. It logs through the injected `LogManager`.
 - `onIo` / `onCpu` offload helpers, with one rule: READ confined state
   before offloading (capture into locals), WRITE it after returning.
+- `start()`, called once by `AppComponent.start()` in construction
+  order: the home for first fetches and warmups the init budget
+  keeps out of constructors (JokeManager's first load lives here).
 - `close()`, called by the component in reverse construction order.
+
+Transient failures retry through `util/Retry.kt`: `RetryPolicy` plus
+`retry` (one-shot operations: bounded attempts, capped exponential
+backoff, cancellation and permanent failures rethrow immediately) and
+`retryForever` (long-lived stream bridges: the block's `onHealthy`
+hook resets the backoff on each successful emission). Both DataStore
+bus bridges ride `retryForever`, so one bad read costs a delay, not
+the feature. Work that must survive process death is NOT retry
+material; it belongs to the durable job pipeline
+(ARCHITECTURE-SCALING.md).
 
 UI delivery is unaffected: `listenTo` callbacks always arrive on the
 main dispatcher, whatever thread the manager published from.
@@ -195,16 +235,27 @@ needs to react to another manager's events.
   is the real adapter, tests inject a fake and drive changes by hand.
 - `Clock` (from `kotlin.time`) is injected via `AppConfig` wherever
   wall time is read (log timestamps), so tests can pin time.
-- `CrashReporter` (`di/CrashReporter.kt`) is the crash-backend seam;
-  the component's uncaught-exception handler calls `recordFatal`, the
-  no-op default reports nowhere.
+- `CrashReporter` (`di/CrashReporter.kt`) is the crash-backend seam
+  (its KDoc carries copy-paste Crashlytics and Sentry shapes). The
+  component's handler calls `recordFatal`; everything else funnels
+  through the LogManager: every accepted ERROR line becomes a
+  `recordNonFatal` (the attached throwable, or a call-site-stamped
+  `LoggedError`), and every bus trigger plus every WARN/ERROR line
+  becomes a `recordBreadcrumb`, so release crash reports carry the
+  recent app history even though DEBUG traces stay out of the file.
 - `LogManager` writes through a bounded single-writer channel so
   logging never does IO on the calling thread, with two crash-forensic
   exceptions: ERROR-level lines drain the queue synchronously before
-  the call returns, and `flushForCrash()` lets a dying process make
-  the same best-effort drain. The log file rotates by size
-  (`base-app.log` becomes `base-app.1.log` at the `AppConfig` cap;
-  one rotated file is kept).
+  the call returns (BOUNDED at 64 commands, so a full queue can never
+  ANR the calling thread; the writer lands any remainder moments
+  later), and `flushForCrash()` keeps the unbounded drain for a dying
+  process. Failed file writes report through Logcat, one non-fatal
+  per process, and an honest marker line in the log itself. The log
+  file rotates by size (`base-app.log` becomes `base-app.1.log` at
+  the `AppConfig` cap; one rotated file is kept), and
+  `writeExportSnapshot()` copies rotated-plus-live into an export
+  file that Settings shares as a FileProvider URI stream (never
+  `EXTRA_TEXT`, which drops history and risks the ~1 MB Binder cap).
 
 ### Feature flags
 
@@ -234,6 +285,37 @@ debug override > provider > compiled default.
   (off by default) gates the reconnect auto-refresh choreography;
   enable it from the sheet to watch the choreography run.
 
+### Navigation
+
+A hand-rolled typed router (`navigation/`), mirroring the iOS
+sibling's HomeRouter and deliberately shaped like Navigation 3 so the
+library migration at threshold is mechanical (the recipe lives in
+ARCHITECTURE-SCALING.md):
+
+- Destinations are DATA: `AppTab` (the root tabs) and per-tab sealed
+  hierarchies (`HomeDestination.JokeDetail(jokeId)`). Every switch is
+  exhaustive; adding a screen is a compile error until handled, and
+  no index can fall into a silent else.
+- `AppRouter` holds the selected tab plus one `TabRouter` back stack
+  per tab; `TabStackHost` renders each stack inside the keep-alive
+  shell, so the tab bar stays visible on pushed screens and stacks
+  survive tab switches. System back pops the selected tab's stack
+  and otherwise finishes the activity; re-selecting a tab pops it to
+  its root.
+- Process death: the WHOLE navigation state round-trips through one
+  JSON string in saved instance state (`rememberAppRouter`); corrupt
+  or stale state from an app update restores to a fresh root, never
+  a crash. Destination arguments follow the payload-evolution rules.
+- Deep links (`baseapp://joke/<id>`, same scheme as iOS) map to
+  destinations in ONE JVM-testable method,
+  `AppRouter.handleDeepLink`; MainActivity only moves strings
+  (singleTop plus onNewIntent).
+- THE SEAM RULE: managers and viewmodels never navigate; they publish
+  facts, and the shell (the router's only owner) maps facts to router
+  calls in one choke point (`RouteOnAppEvents`). Direct user actions
+  stay semantic lambdas (`onOpenJokeDetail`), wired to the router at
+  the shell, so pages remain previewable and navigation-free.
+
 ### UI layer
 
 - `views/` + `views/components/`: pages and reusable components; every
@@ -250,13 +332,16 @@ debug override > provider > compiled default.
 
 `JokeManager` shows how to add a feature: declare the service's base
 URL beside the manager and wrap the shared `httpClient` in the
-manager's own `ApiClient`, fetch in the manager, publish ONE state
-event (`JokeStateChanged`, a `StateKey<JokeState>` declared beside the
-manager) whose payload carries the whole story (REFRESHING, then
-SUCCESS or FAILED, retaining the last good joke), let views listen,
-and let the viewmodel forward user actions. Copy that shape for real
-features; each new service gets its own per-endpoint `ApiClient` on
-the same shared engine.
+manager's own `ApiClient`, subscribe in init but fetch in `start()`
+(the init budget), publish ONE state event (`JokeStateChanged`, a
+`StateKey<JokeState>` declared beside the manager) whose payload
+carries the whole story (REFRESHING, then SUCCESS or FAILED,
+retaining the last good joke), let views listen, and let the
+viewmodel forward user actions. The pushed `JokeDetailPage` shows the
+navigation half: a typed destination with an argument, reached only
+through the router, rendered from bus state. Copy those shapes for
+real features; each new service gets its own per-endpoint `ApiClient`
+on the same shared engine.
 
 ## Stack
 
@@ -290,15 +375,24 @@ fakes only (`app/src/test`):
 - `testkit/TestEventRecorder` is the event assertion kit: suspending
   `expectEvent`/`expectState`, `assertOrder`, `assertNoEvent`.
 - Suites: `EventManagerContractSpec` (validation, replay vs signal,
-  session reset, `unsubscribeOwner`, weak-owner sweep),
-  `JokeManagerLifecycleSpec`, `DataStoreManagerSpec`,
+  session reset, `unsubscribeOwner`, both sides of the weak-owner
+  contract), `JokeManagerLifecycleSpec`, `DataStoreManagerSpec`
+  (including bridge resubscription after a read failure),
   `JokeConnectivityChoreographySpec` (the reconnect auto-refresh and
   its flag gate), `FeatureFlagManagerSpec` (layer precedence, live
-  provider updates, override persistence, the release lock),
-  `MainViewModelSpec`, `SettingsViewModelSpec`, plus the guards:
-  `CompositionRootGuardTest` (no global container or library-kit
-  terminology) and `FeatureFlagRegistryGuardTest` (every declared
-  flag is registered).
+  provider updates, override persistence, the release lock, bridge
+  resubscription), `LogManagerReportingSpec` (the telemetry funnel,
+  breadcrumbs, level filtering, write-failure markers),
+  `LogManagerCrashSafetySpec`, `RetrySpec` (the full retry-utility
+  contract), `AppRouterSpec` (back semantics, deep links, corrupt
+  restore), `MainViewModelSpec`, `SettingsViewModelSpec` (including
+  the export snapshot's flush and rotated-history guarantees), plus
+  the guards: `CompositionRootGuardTest` (no global container or
+  library-kit terminology), `FeatureFlagRegistryGuardTest` (every
+  declared flag is registered), `WiringConventionsGuardTest`
+  (single-publisher; AppModule mirrors the component's managers),
+  and the init-budget fence in `TestAppContextSpec` (construction
+  performs zero network IO).
 
 Instrumented flow tests drive the REAL app on a connected device or
 emulator (real Hilt graph, real managers, real DataStore; no mocks

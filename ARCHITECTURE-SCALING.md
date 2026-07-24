@@ -20,6 +20,8 @@ pays for on every change.
 | Payload evolution    | day one (rules, not a mechanism)            |
 | Flag vendor adapter  | the first remotely-controlled flag          |
 | Flag experiments     | the first A/B test                          |
+| Navigation 3 upgrade | ~15 destinations, the first nested/modal    |
+|                      | flow, or predictive-back needs              |
 
 Everything below refers to the shipped code by its real names:
 `AppComponent` and `AppConfig` in `di/`, `EventManager` /
@@ -101,6 +103,25 @@ Why this exact order:
 Login constructs a fresh `SessionComponent`; logout and account switch
 call `close()` and drop the reference. The process-scoped bus is
 shared: session keys are just keys whose caches the reset clears.
+
+ROUTING THE SESSION END: `SessionEnded` is also the first fact the
+navigation seam routes. The shell's `RouteOnAppEvents` choke point
+(NavigationBar.kt) ships empty today; adopting the session component
+fills it, keeping ALL routing policy in that one function:
+
+```kotlin
+val eventManager = LocalEventManager.current
+DisposableEffect(eventManager, appRouter) {
+    val routingOwner = object {}
+    // A COMPLETED logout lands the user on Home's root; the manager
+    // that published the fact knows nothing about navigation.
+    eventManager.listenTo(SessionEnded, routingOwner) {
+        appRouter.selectTab(AppTab.HOME)
+        appRouter.homeRouter.popToRoot()
+    }
+    onDispose { eventManager.unsubscribeOwner(routingOwner) }
+}
+```
 
 ## 2. Durable job pipeline
 
@@ -359,3 +380,45 @@ the registry guard with per-flag metadata (owner, introduced date)
 and fail the build when a flag is older than a chosen ceiling
 (e.g. 180 days) without an explicit `permanent = true` marker, which
 is reserved for true kill switches.
+
+## 8. Navigation 3 upgrade
+
+Adoption threshold: about 15 destinations, the first nested or modal
+flow (auth, checkout, a multi-step form), or a product requirement
+for predictive-back previews or shared-element transitions. The typed
+router itself is NOT deferred: destinations as data, per-tab stacks,
+one deep-link function, and process-death restore ship in the
+skeleton (navigation/), because retrofitting types onto stringly or
+index-based navigation later means touching every screen. Like
+payload evolution, the mechanism is day-one; only the LIBRARY has a
+threshold.
+
+The shipped router is deliberately Navigation 3-shaped: Nav 3's model
+is an app-owned snapshot back stack of typed serializable keys that
+the library renders. Migration recipe:
+
+1. Destination types implement NavKey (they are already @Serializable
+   data types; this is an interface change, not a remodel).
+2. Each TabRouter's list becomes a rememberNavBackStack; push and pop
+   stay list operations.
+3. TabStackHost is replaced by NavDisplay with an entryProvider whose
+   entries are the SAME exhaustive `when` branches.
+4. The JSON Saver in AppNavigationState.kt is deleted; NavKey stacks
+   handle saved state.
+5. handleDeepLink and every AppRouterSpec test survive unchanged:
+   they touch only destinations and stacks, never the renderer.
+
+What the upgrade buys AT the threshold: predictive-back previews,
+directional and shared-element transitions, and per-entry
+ViewModelStore/lifecycle scoping. Before adopting, verify the library
+is stable and its androidx train fits the pinned compileSdk/AGP (see
+the warning in gradle/libs.versions.toml); until then the hand-rolled
+router costs nothing to keep.
+
+Deferred with it (do not hand-roll these early): nested graphs,
+modal/bottom-sheet destinations as stack entries, per-destination
+ViewModelStores, and directional push/pop transitions beyond the
+shared content-swap motion. One accepted quirk of the keep-alive
+shell plus stack host: popping to a root replays that page's one-shot
+entrance animation, a deliberate simplicity trade recorded here so
+nobody "fixes" it into complexity prematurely.

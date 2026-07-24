@@ -1,5 +1,6 @@
 package com.mattmooneyham.base.android
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -8,7 +9,9 @@ import androidx.activity.viewModels
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.tooling.preview.Preview
+import com.mattmooneyham.base.android.navigation.AppTab
 import com.mattmooneyham.base.android.viewModels.MainViewModel
 import com.mattmooneyham.base.android.viewModels.SettingsViewModel
 import com.mattmooneyham.base.android.views.BaseAppTheme
@@ -30,6 +33,12 @@ class MainActivity : ComponentActivity() {
     private val mainViewModel: MainViewModel by viewModels()
     private val settingsViewModel: SettingsViewModel by viewModels()
 
+    // The latest not-yet-routed deep link. The activity only moves
+    // strings; all URL knowledge (scheme, hosts, argument parsing)
+    // lives in AppRouter.handleDeepLink. The shell consumes the value
+    // and calls back to clear it, so recompositions never re-route.
+    private val pendingDeepLinkUrl = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -39,16 +48,34 @@ class MainActivity : ComponentActivity() {
         // "Welcome back!" (until cleared from Settings).
         mainViewModel.markWelcomeSeen()
 
+        // Cold-start links ride the launching intent. On recreation
+        // rememberSaveable restores the stacks and the intent was
+        // already consumed, so it must not replace them again.
+        if (savedInstanceState == null) {
+            pendingDeepLinkUrl.value = intent?.dataString
+        }
+
         setContent {
             CompositionLocalProvider(LocalEventManager provides eventManager) {
                 BaseAppTheme {
                     NavigationBar(
                         mainViewModel = mainViewModel,
                         settingsViewModel = settingsViewModel,
+                        pendingDeepLinkUrl = pendingDeepLinkUrl.value,
+                        onDeepLinkConsumed = {
+                            pendingDeepLinkUrl.value = null
+                        },
                     )
                 }
             }
         }
+    }
+
+    // Warm-start links: the activity is already up, and singleTop
+    // routes the intent here instead of stacking a second activity.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        pendingDeepLinkUrl.value = intent.dataString
     }
 }
 
@@ -59,7 +86,7 @@ class MainActivity : ComponentActivity() {
 private fun MainActivityContentPreview() {
     BaseAppTheme {
         NavigationBarScaffold(
-            selectedTabIndex = 0,
+            selectedTab = AppTab.HOME,
             onTabSelected = {},
         ) {
             Text(text = "Home preview")

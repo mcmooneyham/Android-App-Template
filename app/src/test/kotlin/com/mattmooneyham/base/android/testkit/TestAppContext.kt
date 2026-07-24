@@ -54,6 +54,10 @@ class TestAppContext(
     // specs exercise the debug behavior; pass false to spec the locked
     // release resolution.
     featureFlagOverridesEnabled: Boolean = true,
+    // Mirrors BaseApplication, which calls start() right after
+    // construction, so existing specs keep their semantics; pass
+    // false to observe the construction window (the init budget).
+    autoStart: Boolean = true,
 ) {
 
     val mainDispatcher: TestDispatcher = UnconfinedTestDispatcher()
@@ -101,6 +105,7 @@ class TestAppContext(
             filesDirectory.deleteRecursively()
             throw constructionFailure
         }
+        if (autoStart) component.start()
     }
 
     /** A recorder on this component's event manager. */

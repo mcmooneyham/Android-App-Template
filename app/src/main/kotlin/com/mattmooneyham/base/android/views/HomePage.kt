@@ -38,10 +38,15 @@ import com.mattmooneyham.base.android.managers.eventManager.eventStateOrNull
  * Home tab. Simple event-backed values are observed straight from the
  * event bus via the Compose-native [eventState] helpers; the
  * viewmodel supplies only the greeting and write actions. Rendering
- * lives in the previewable [HomePageContent].
+ * lives in the previewable [HomePageContent]. Navigation stays a
+ * semantic lambda ([onOpenJokeDetail]): the shell wires it to the
+ * router, so pages never see navigation machinery.
  */
 @Composable
-fun HomePage(mainViewModel: MainViewModel) {
+fun HomePage(
+    mainViewModel: MainViewModel,
+    onOpenJokeDetail: (jokeId: Int) -> Unit,
+) {
     val isOnline by eventState(
         key = NetworkConnectivityChanged,
         initialValue = false,
@@ -82,6 +87,10 @@ fun HomePage(mainViewModel: MainViewModel) {
                 }
             },
             onRefreshJoke = mainViewModel::refreshJoke,
+            // Only a loaded joke can be opened; null hides the tap.
+            onOpenJokeDetail = jokeState?.joke?.id?.let { jokeId ->
+                { onOpenJokeDetail(jokeId) }
+            },
         )
     }
 }
@@ -96,6 +105,7 @@ private fun HomePageContent(
     isJokeRefreshing: Boolean,
     jokeErrorMessage: String?,
     onRefreshJoke: () -> Unit,
+    onOpenJokeDetail: (() -> Unit)?,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -141,6 +151,7 @@ private fun HomePageContent(
             isLoading = isJokeRefreshing,
             errorMessage = jokeErrorMessage,
             onRefresh = onRefreshJoke,
+            onOpenDetails = onOpenJokeDetail,
         )
     }
 }
@@ -158,6 +169,7 @@ private fun HomePageContentPreview() {
             isJokeRefreshing = false,
             jokeErrorMessage = null,
             onRefreshJoke = {},
+            onOpenJokeDetail = {},
         )
     }
 }

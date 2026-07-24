@@ -62,6 +62,10 @@ class LogManagerCrashSafetySpec {
         assertEquals(listOf(simulatedCrash), crashReporter.recordedFatals)
         assertEquals(listOf(simulatedCrash), delegatedCrashes)
 
+        // Counted exactly once upstream: the crash's log line rides
+        // logFatal, which must NOT also become a non-fatal.
+        assertTrue(crashReporter.recordedNonFatals.isEmpty())
+
         // The crash line reached the log file. flush() only covers the
         // one command the writer may have claimed before flushForCrash
         // could drain it; everything else was already forced to disk.

@@ -51,6 +51,9 @@ class BaseApplication : Application() {
                 "(version ${BuildConfig.VERSION_NAME}, " +
                 "build ${BuildConfig.BUILD_TIMESTAMP_SECONDS})",
         )
+        // Construction wired everything without IO; start() runs the
+        // managers' first fetches and warmups (the init budget).
+        appComponent.start()
         super.onCreate()
     }
 

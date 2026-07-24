@@ -31,15 +31,17 @@ import kotlin.collections.iterator
  *   identifiers. Rebuilding the manager therefore drops all cached
  *   state, and [resetSessionReplayCaches] clears the replay caches of
  *   session-lifetime keys in place (logout / account switch).
- * - Listeners are automatically removed when their owner is deallocated
- *   (weak owner tracking). The PRIMARY contract is still that a
- *   subscription lives exactly as long as its owner, which makes leaks
- *   a matter of object lifetime (visible in a memory profiler) rather
- *   than of forgotten remove calls scattered across screens. For
- *   deterministic teardown (session end, tests) [unsubscribeOwner]
- *   detaches an owner's subscriptions immediately. Dead registrations
- *   are additionally swept eagerly on every new registration and pruned
- *   on delivery.
+ * - OWNER LIFECYCLE: the PRIMARY contract is deterministic teardown
+ *   through [unsubscribeOwner] (ViewModels in onCleared, sessions at
+ *   session end, tests); managers simply rely on the bus dying with
+ *   the component. As a SAFETY NET, callbacks run WITH THE OWNER AS
+ *   RECEIVER while the bus holds the owner weakly and resolves it per
+ *   delivery: a callback that reaches the owner only through the
+ *   receiver (the idiomatic shape; see JokeManager) is removed
+ *   automatically once the owner is collected. A callback that
+ *   CAPTURES the owner, or anything strongly holding it, pins the
+ *   owner until [unsubscribeOwner]. Dead registrations are swept
+ *   eagerly on every new registration and pruned on delivery.
  * - All listener callbacks are dispatched on the main queue. A listener
  *   that throws is logged loudly and KEPT ALIVE; one bad payload must
  *   not silently kill a screen's subscription.
@@ -165,26 +167,49 @@ class EventManager {
     }
 
     /**
-     * Subscribes with a typed callback. The listener is automatically
-     * removed after [owner] is deallocated. If a replaying key was
-     * previously triggered, the cached value is replayed immediately.
-     * Callbacks run on the main queue and survive their own exceptions.
+     * Subscribes [owner] with a typed callback that runs WITH THE
+     * OWNER AS RECEIVER: the bus holds the owner weakly and resolves
+     * it per delivery, so a callback that reaches the owner only
+     * through the receiver is removed automatically once the owner is
+     * collected. A callback that CAPTURES the owner (or anything that
+     * strongly holds it) pins the owner until [unsubscribeOwner];
+     * deterministic teardown therefore always goes through
+     * [unsubscribeOwner], the primary contract, with auto-removal as
+     * the safety net.
+     *
+     * Pass lambda LITERALS: stored `(Payload) -> Unit` values and
+     * function references do not adapt to a receiver type. When
+     * [owner] is not `this`, members of the enclosing class need an
+     * explicit `this@Outer`, since the owner receiver shadows it.
+     *
+     * If a replaying key was previously triggered, the cached value
+     * is replayed immediately. Callbacks run on the main queue and
+     * survive their own exceptions.
      */
-    fun <PayloadType : Any> listenTo(
+    fun <OwnerType : Any, PayloadType : Any> listenTo(
         key: StateKey<PayloadType>,
-        owner: Any,
-        onEvent: (PayloadType) -> Unit,
+        owner: OwnerType,
+        onEvent: OwnerType.(PayloadType) -> Unit,
     ) {
-        subscribe(key, owner) { payload ->
-            // Safe: publish() only emits validated payloads.
+        subscribe(key, owner) { liveOwner, payload ->
+            // Safe: publish() only emits validated payloads, and
+            // subscribe() only resolves owners it registered.
             @Suppress("UNCHECKED_CAST")
-            onEvent(payload as PayloadType)
+            (liveOwner as OwnerType).onEvent(payload as PayloadType)
         }
     }
 
-    /** Subscribes to a payloadless signal key. */
-    fun listenTo(key: SignalKey, owner: Any, onSignal: () -> Unit) {
-        subscribe(key, owner) { onSignal() }
+    /** Subscribes to a payloadless signal key; the callback runs with
+     * the weakly held [owner] as receiver (see the typed overload). */
+    fun <OwnerType : Any> listenTo(
+        key: SignalKey,
+        owner: OwnerType,
+        onSignal: OwnerType.() -> Unit,
+    ) {
+        subscribe(key, owner) { liveOwner, _ ->
+            @Suppress("UNCHECKED_CAST")
+            (liveOwner as OwnerType).onSignal()
+        }
     }
 
     /**
@@ -275,7 +300,12 @@ class EventManager {
 
     private fun publish(key: AnyEventKey, payload: Any?) {
         if (!isPayloadValid(key, payload)) return
-        logManager?.debug(
+        // Breadcrumb, not debug: the trace always reaches the crash
+        // report's bounded ring, so production post-mortems see the
+        // recent bus history even though release builds keep DEBUG
+        // lines out of the log file. describePayload never prints
+        // string contents, so nothing sensitive rides along.
+        logManager?.breadcrumb(
             "Triggered '${key.eventName}'${describePayload(payload)}",
         )
         // Emit under flowsLock (reentrant with flowFor's own hold) so a
@@ -290,17 +320,22 @@ class EventManager {
     private fun subscribe(
         key: AnyEventKey,
         owner: Any,
-        onEvent: (Any?) -> Unit,
+        onEvent: (Any, Any?) -> Unit,
     ) {
         val ownerRef = createWeakOwnerRef(owner)
         val job = listenerScope.launch {
             flowFor(key).collect { payload ->
-                if (!isOwnerAlive(ownerRef)) {
+                // Resolve per delivery: a strong owner reference
+                // exists only while the callback runs, which is what
+                // keeps receiver-style callbacks from pinning their
+                // owner between deliveries.
+                val liveOwner = ownerReferent(ownerRef)
+                if (liveOwner == null) {
                     currentCoroutineContext()[Job]?.cancel()
                     return@collect
                 }
                 try {
-                    onEvent(payload)
+                    onEvent(liveOwner, payload)
                 } catch (cancellation: CancellationException) {
                     // Rethrow FIRST: the generic Exception catch below
                     // must never swallow coroutine cancellation.

@@ -31,6 +31,14 @@ import kotlinx.coroutines.withContext
  * free; override it when extra teardown (channels, platform callbacks)
  * must happen, calling `super.close()` last.
  *
+ * THE INIT BUDGET: construction may allocate, subscribe to events,
+ * launch internal collections, and register cheap platform or boundary
+ * callbacks (a connectivity monitor, a flag provider). Construction
+ * MUST NOT issue network requests or any work of unbounded latency;
+ * first fetches and warmups belong in [start], so building the
+ * component never gates cold start. Boundary adapters given a
+ * callback at registration must not fetch synchronously inside it.
+ *
  * @param managerName names the confinement for diagnostics.
  * @param failureLogManager receives uncaught-exception reports; null
  *   only for the LogManager itself, which cannot safely log through its
@@ -74,6 +82,17 @@ abstract class ConfinedManager(
     protected suspend fun <ResultType> onCpu(
         block: suspend CoroutineScope.() -> ResultType,
     ): ResultType = withContext(Dispatchers.Default, block)
+
+    /**
+     * Post-construction side effects (first fetches, warmups) belong
+     * here, never in init: construction must stay free of network IO
+     * so building the component never gates cold start (see the init
+     * budget in the class KDoc). Called once by AppComponent.start(),
+     * in construction order, after every manager exists and the crash
+     * handler is installed. Specs that construct a manager directly
+     * call start() themselves. Default: nothing.
+     */
+    open fun start() = Unit
 
     /**
      * Cancels every coroutine on [managerScope]. A closed manager

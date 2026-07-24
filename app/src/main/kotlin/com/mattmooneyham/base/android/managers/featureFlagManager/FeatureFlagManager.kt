@@ -9,7 +9,9 @@ import com.mattmooneyham.base.android.managers.eventManager.EventLifetime
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.eventManager.StateKey
 import com.mattmooneyham.base.android.managers.logManager.LogManager
-import kotlinx.coroutines.flow.catch
+import com.mattmooneyham.base.android.util.RetryPolicy
+import com.mattmooneyham.base.android.util.retryForever
+import kotlin.time.Duration
 import kotlinx.coroutines.launch
 
 // State: the resolved value and deciding layer of every declared flag.
@@ -93,17 +95,18 @@ class FeatureFlagManager(
 
         // Debug builds stream persisted overrides (initial load plus
         // every setOverride edit) and re-resolve. Release builds have
-        // no store, so this layer never exists.
+        // no store, so this layer never exists. The bridge must never
+        // die (Flow.catch would end it on the first read failure):
+        // retryForever resubscribes with capped backoff, first
+        // failure per outage at ERROR, repeats at WARN.
         if (overridesStore != null) {
             managerScope.launch {
-                overridesStore.data
-                    .catch { storeFailure ->
-                        logManager.warn(
-                            "Flag override stream failed: " +
-                                "${storeFailure.message}",
-                        )
-                    }
-                    .collect { preferences ->
+                retryForever(
+                    policy = RetryPolicy(maxAttempts = null),
+                    onRetry = ::reportBridgeFailure,
+                ) { onHealthy ->
+                    overridesStore.data.collect { preferences ->
+                        onHealthy()
                         overrideValues = preferences.asMap().entries
                             .mapNotNull { (preferenceKey, value) ->
                                 (value as? Boolean)?.let { enabled ->
@@ -113,6 +116,7 @@ class FeatureFlagManager(
                             .toMap()
                         publishResolvedFlags()
                     }
+                }
             }
         }
 
@@ -169,8 +173,29 @@ class FeatureFlagManager(
                 logManager.error(
                     "Override write for '${flag.flagKey}' failed: " +
                         "${writeFailure.message}",
+                    throwable = writeFailure,
                 )
             }
+        }
+    }
+
+    /** First failure per outage at ERROR, repeats at WARN. */
+    private fun reportBridgeFailure(
+        attempt: Int,
+        storeFailure: Throwable,
+        nextDelay: Duration,
+    ) {
+        if (attempt == 1) {
+            logManager.error(
+                "Flag override bridge failed; resubscribing in " +
+                    "$nextDelay",
+                throwable = storeFailure,
+            )
+        } else {
+            logManager.warn(
+                "Flag override bridge failed again " +
+                    "(attempt $attempt); resubscribing in $nextDelay",
+            )
         }
     }
 

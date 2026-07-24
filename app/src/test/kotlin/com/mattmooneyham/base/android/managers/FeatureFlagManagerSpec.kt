@@ -9,7 +9,10 @@ import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagsCh
 import com.mattmooneyham.base.android.managers.featureFlagManager.FlagSource
 import com.mattmooneyham.base.android.managers.featureFlagManager.NoOpFeatureFlagProvider
 import com.mattmooneyham.base.android.managers.featureFlagManager.ResolvedFlag
+import com.mattmooneyham.base.android.managers.logManager.LogFileSettings
 import com.mattmooneyham.base.android.managers.logManager.LogManager
+import com.mattmooneyham.base.android.testkit.FakeCrashReporter
+import com.mattmooneyham.base.android.testkit.FlakyPreferencesDataStore
 import com.mattmooneyham.base.android.testkit.TestAppContext
 import com.mattmooneyham.base.android.testkit.TestEventRecorder
 import java.io.File
@@ -160,8 +163,10 @@ class FeatureFlagManagerSpec {
             )
             // File logging off: this spec needs no log assertions.
             val quietLogManager = LogManager(
-                logDirectoryPath = null,
-                fileLoggingEnabled = false,
+                fileSettings = LogFileSettings(
+                    directoryPath = null,
+                    fileLoggingEnabled = false,
+                ),
             )
             try {
                 // "First launch": set an override and let it persist.
@@ -217,6 +222,73 @@ class FeatureFlagManagerSpec {
                 storeScope.cancel()
                 storeDirectory.deleteRecursively()
                 @OptIn(ExperimentalCoroutinesApi::class)
+                Dispatchers.resetMain()
+            }
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `the override bridge survives a read failure and resubscribes`() =
+        runBlocking<Unit> {
+            // The same dead-bridge hazard as the DataStoreManager,
+            // fixed the same way: the first store collection dies,
+            // retryForever resubscribes, and overrides still apply.
+            Dispatchers.setMain(UnconfinedTestDispatcher())
+            val storeDirectory =
+                Files.createTempDirectory("flaky-flag-store-").toFile()
+            val storeScope = createDataStoreScope()
+            val flakyStore = FlakyPreferencesDataStore(
+                delegate = createPreferencesDataStore(
+                    coroutineScope = storeScope,
+                    produceFile = {
+                        File(
+                            storeDirectory,
+                            FeatureFlagManager.FLAG_OVERRIDES_FILE_NAME,
+                        )
+                    },
+                ),
+                failuresToServe = 1,
+            )
+            val crashReporter = FakeCrashReporter()
+            val quietLogManager = LogManager(
+                fileSettings = LogFileSettings(
+                    directoryPath = null,
+                    fileLoggingEnabled = false,
+                ),
+                crashReporter = crashReporter,
+            )
+            val eventBus = EventManager()
+            val flagManager = FeatureFlagManager(
+                flags = AppFlags.all,
+                overridesStore = flakyStore,
+                provider = NoOpFeatureFlagProvider,
+                eventManager = eventBus,
+                logManager = quietLogManager,
+            )
+            val recorder = TestEventRecorder(eventBus)
+                .record(FeatureFlagsChanged)
+            try {
+                // An override set while the read side is recovering
+                // still lands: writes pass through, and the
+                // resubscribed collection picks them up.
+                flagManager.setOverride(
+                    JokeAutoRetryOnReconnectFlag,
+                    true,
+                )
+                recorder.expectStateMatching(
+                    FeatureFlagsChanged,
+                ) { snapshot ->
+                    snapshot.flagsByKey[FLAG_KEY] ==
+                        ResolvedFlag(true, FlagSource.OVERRIDE)
+                }
+                assertTrue(flakyStore.collectionCount.get() >= 2)
+                assertEquals(1, crashReporter.recordedNonFatals.size)
+            } finally {
+                flagManager.close()
+                eventBus.close()
+                quietLogManager.close()
+                storeScope.cancel()
+                storeDirectory.deleteRecursively()
                 Dispatchers.resetMain()
             }
         }

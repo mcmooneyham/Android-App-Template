@@ -38,13 +38,14 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
-     * Log contents for the share sheet; flushes the background writer
-     * first so the export contains every line logged so far.
+     * Writes the complete log snapshot (rotated history plus live
+     * file) for URI-based sharing and returns its path, or null when
+     * there is nothing to share. Flushing happens inside the
+     * LogManager, so the snapshot includes every line logged before
+     * the tap.
      */
-    suspend fun readLogsForExport(): String {
-        logManager.flush()
-        return logManager.readLogContents()
-    }
+    suspend fun writeLogExportSnapshot(): String? =
+        logManager.writeExportSnapshot()
 
     /** Deletes the app's log file. */
     fun clearLogs() {

@@ -1,6 +1,7 @@
 package com.mattmooneyham.base.android.views
 
 import android.content.Intent
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -49,6 +50,7 @@ import com.mattmooneyham.base.android.views.components.SectionHeader
 import com.mattmooneyham.base.android.views.components.SettingsGroupCard
 import com.mattmooneyham.base.android.views.components.SettingsRow
 import com.mattmooneyham.base.android.constants.BrandColors
+import java.io.File
 import kotlinx.coroutines.launch
 
 /**
@@ -89,14 +91,30 @@ fun SettingsPage(settingsViewModel: SettingsViewModel) {
         onClearWelcomeFlag = settingsViewModel::clearWelcomeFlag,
         onExportLogs = {
             exportScope.launch {
-                val logContents = settingsViewModel.readLogsForExport()
+                val exportPath =
+                    settingsViewModel.writeLogExportSnapshot()
                 val sendIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_SUBJECT, "Base App logs")
-                    putExtra(
-                        Intent.EXTRA_TEXT,
-                        logContents.ifEmpty { "No logs recorded yet." },
-                    )
+                    if (exportPath != null) {
+                        // The FULL history rides a content URI; text
+                        // extras would drop the rotated half and can
+                        // blow the ~1 MB Binder transaction cap.
+                        val exportUri = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.logexport",
+                            File(exportPath),
+                        )
+                        putExtra(Intent.EXTRA_STREAM, exportUri)
+                        addFlags(
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                        )
+                    } else {
+                        putExtra(
+                            Intent.EXTRA_TEXT,
+                            "No logs recorded yet.",
+                        )
+                    }
                 }
                 context.startActivity(
                     Intent.createChooser(sendIntent, "Export logs"),

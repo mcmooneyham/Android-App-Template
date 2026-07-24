@@ -2,6 +2,7 @@ package com.mattmooneyham.base.android.views.components
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -29,7 +30,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -56,11 +59,26 @@ fun JokeCard(
     errorMessage: String?,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
+    // Non-null makes the whole card tappable: the navigation
+    // affordance HomePage wires to the router. The testTag is the
+    // instrumented suite's stable handle for that tap.
+    onOpenDetails: (() -> Unit)? = null,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(24.dp),
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("JokeCard")
+            // Clip BEFORE clickable so the ripple honors the shape.
+            .clip(RoundedCornerShape(24.dp))
+            .then(
+                if (onOpenDetails != null) {
+                    Modifier.clickable { onOpenDetails() }
+                } else {
+                    Modifier
+                },
+            ),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -17,13 +17,38 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- baseapp://joke/<id>: the same deep-link scheme the
+                 iOS sibling handles; AppRouter.handleDeepLink is the
+                 one place URLs become navigation state. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category
+                    android:name="android.intent.category.DEFAULT" />
+                <category
+                    android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="baseapp" android:host="joke" />
+            </intent-filter>
         </activity>
+
+        <!-- Log export rides a content URI (EXTRA_STREAM), never
+             EXTRA_TEXT: a full log file would threaten the ~1 MB
+             Binder transaction cap. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.logexport"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/log_export_paths" />
+        </provider>
     </application>
 
 </manifest>
