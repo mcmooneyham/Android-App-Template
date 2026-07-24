@@ -196,7 +196,7 @@ changes; the pipeline slots in as one more manager plus its storage.
 
 STAGE 0 SHIPS IN THE SKELETON: a three-module layer cut whose whole
 point is that the COMPILER arbitrates the layering (see the README's
-module-structure section). `:core` is a Kotlin JVM library, so
+Modules section). `:core` is a Kotlin JVM library, so
 `android.*` imports in manager code are unresolvable, not merely
 frowned on; `:ui` depends only on `:core`, so UI code cannot reach
 the adapters or the composition root; `:app` sees everything and
@@ -327,7 +327,7 @@ following them from day one costs nothing.
 
 ## 7. Feature flag scaling
 
-The shipped system (see the README's "Feature flags" section) is
+The shipped system (see ARCHITECTURE.md's "Feature flags" section) is
 deliberately minimal: boolean flags, a no-op provider seam, and
 debug-only persisted overrides, with release builds structurally
 locked to compiled defaults. The designs below extend it.
