@@ -1,10 +1,11 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-// Living documentation. This module compiles against :core and :ui on
-// every build and runs its own spec, so the exemplars can never rot,
-// but NOTHING depends on it: it adds zero bytes to the APK. It is
-// also deliberately absent from the guard tests' GUARDED_MODULES, so
-// template keys and flags never pollute the real registries.
+// Living documentation. This module compiles against :core and :ui
+// and runs its own spec on every CI run (and any root build), so the
+// exemplars can never rot, but NOTHING depends on it: it adds zero
+// bytes to the APK. It is also deliberately absent from the guard
+// tests' GUARDED_MODULES, so template keys and flags never pollute
+// the real registries.
 plugins {
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.composeCompiler)

@@ -11,7 +11,11 @@ kotlin = "2.4.10"
 ksp = "2.3.10"
 hilt = "2.60.1"
 android-compileSdk = "36"
+# Template floor: Android 12L. High device coverage while skipping
+# the pre-12 compat branches (legacy backup config, older permission
+# shims); lower it per product needs, the code compiles unchanged.
 android-minSdk = "32"
+# Latest stable platform, per Play's target-API policy.
 android-targetSdk = "36"
 composeBom = "2026.06.01"
 # Newer androidx.* releases may require compileSdk 37 + AGP 9.1; keep added

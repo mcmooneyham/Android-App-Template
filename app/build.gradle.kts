@@ -83,12 +83,24 @@ android {
     }
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 on: the release build ships minified from day one so
+            // keep-rule gaps surface in CI's assembleRelease, never in
+            // a derived app's first release week. The app-specific
+            // rules live in proguard-rules.pro (call-site attribution
+            // and stack-trace attributes); library rules ship inside
+            // the libraries themselves.
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
         }
+    }
+    lint {
+        // lintVitalRelease already gates release builds by default;
+        // CI additionally runs :app:lintDebug so the full analysis
+        // fails the pipeline, not just the vital subset.
+        abortOnError = true
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
