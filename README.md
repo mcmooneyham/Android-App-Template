@@ -165,6 +165,16 @@ Rule of thumb: if a file needs `android.*`, it belongs in `:app` or
 `:ui`. If the logic still makes sense with every platform detail
 removed, it belongs in `:core`.
 
+This layout is a starting cut, not a ceiling. Adding a module is
+cheap: register it in `settings.gradle.kts`, depend on `:core`, and
+keep the arrows pointing one way. The package tree already mirrors
+the future modules, so each planned split is a `git mv` plus one
+build file. The natural next splits (a `:data` module for
+persistence, a `:platform` module for the adapters, feature modules
+once teams need to work in parallel) are mapped out in
+[ARCHITECTURE-SCALING.md](ARCHITECTURE-SCALING.md), along with the
+point at which each becomes worth doing.
+
 ## Why this shape
 
 - Managers are peers. Nothing grows into a god object, and features
