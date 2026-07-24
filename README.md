@@ -30,6 +30,33 @@ flowchart LR
     B -. "choreography: subscribe,<br/>never hold a reference" .-> M2
 ```
 
+In code, the whole contract is three calls:
+
+```kotlin
+// Declare a key beside the manager that publishes it. The payload
+// type is part of the key, so a mistyped call doesn't compile.
+object JokeStateChanged : StateKey<JokeState>(
+    eventName = "joke.StateChanged",
+    payloadType = JokeState::class,
+)
+
+// The owning manager publishes whenever its state changes.
+eventManager.trigger(JokeStateChanged, newState)
+
+// A composable observes it directly (null until the first publish)
+// and recomposes on every change.
+val jokeState by eventStateOrNull(JokeStateChanged)
+
+// Another manager reacts (choreography). The subscription lives
+// exactly as long as its owner, then dies with it.
+eventManager.listenTo(
+    NetworkConnectivityChanged,
+    owner = this,
+) { isConnected ->
+    managerScope.launch { reactToConnectivity(isConnected) }
+}
+```
+
 Anything that touches the platform (connectivity callbacks, Logcat,
 crash backends, remote flags) sits behind a small interface, and the
 Android implementation lives at the app's edge. The core never sees a
@@ -199,6 +226,25 @@ point at which each becomes worth doing.
   bridges alive, resetting the backoff each time the stream emits
   successfully. The DataStore bridges ride it, so one bad read costs
   a short delay instead of the feature.
+
+  ```kotlin
+  // One-shot work: 3 attempts by default, backoff doubling from
+  // 500 ms, then the last failure rethrows to the caller.
+  val joke = retry(isRetryable = { it is IOException }) {
+      jokeApi.fetchRandomJoke()
+  }
+
+  // Long-lived bridge: resubscribes on failure, and calling
+  // onHealthy() on each emission resets the backoff, so the next
+  // outage starts fresh.
+  retryForever { onHealthy ->
+      store.data.collect { value ->
+          onHealthy()
+          eventManager.trigger(SomethingChanged, value)
+      }
+  }
+  ```
+
 - **Feature flags**: typed boolean flags resolved as debug override >
   remote provider > compiled default. A debug-only sheet in Settings
   lists every flag and lets you override it on the spot. Release
