@@ -1,13 +1,70 @@
 # Android-App-Template
 
-A standalone, production-shaped Android app template: native Jetpack
-Compose UI on top of an event-driven manager core. Three Gradle
-modules enforce the layering at compile time while the whole tree
-stays readable in an afternoon, and every mechanism is one a
-two-person team starting an app would actually use. Designs the
-template deliberately defers live in
-[ARCHITECTURE-SCALING.md](ARCHITECTURE-SCALING.md), each with an
-explicit adoption threshold.
+A standalone Android app template: Jetpack Compose UI on top of an
+event-driven manager core, split across three compiler-enforced
+layer modules. The whole tree is readable in an afternoon. Deferred
+designs live in [ARCHITECTURE-SCALING.md](ARCHITECTURE-SCALING.md),
+each with an explicit adoption threshold.
+
+## The architecture in short
+
+Peer domain managers own all app state. Each manager publishes typed
+events on a central bus when its state changes; views observe the bus
+directly, viewmodels only forward user actions back to managers. A
+single hand-wired composition root (`AppComponent`) constructs
+everything in declaration order, tears it down in reverse, and runs
+first fetches in a separate `start()` phase. Anything that touches
+the platform (connectivity, Logcat, crash backends, remote flags)
+sits behind a small port interface with the Android adapter at the
+edge, which is what lets the entire core be a plain Kotlin JVM
+module.
+
+### What this buys
+
+- No god objects. Managers are peers with no references to each
+  other; cross-feature behavior is a subscription, so features grow
+  side by side instead of accreting into a coordinator.
+- One observation idiom. State reaches the UI exactly one way
+  (typed keys on the bus), so there is one threading contract, one
+  replay rule, and one place every state transition can be traced.
+- The compiler polices the layers. `:core` cannot import `android.*`
+  because it is not on the classpath; `:ui` cannot reach adapters or
+  the composition root because it does not depend on `:app`.
+- Real tests without mocks. JVM specs boot a REAL component with
+  fakes only at the port boundaries; there is no mocking framework
+  in the repo.
+- Deterministic lifecycle. Construction order is declaration order,
+  teardown mirrors it structurally, and the init budget (no IO in
+  constructors) keeps cold start out of wiring.
+
+### What it costs
+
+- Indirection. "Who reacts to this event" is a grep, not a call
+  hierarchy; that stays manageable at this size and needs governance
+  (catalogs, guards) as keys multiply.
+- The bus is deliberately lossy. Latest-wins replay and DROP_OLDEST
+  overflow are right for state projections and wrong for work items;
+  anything that must not be lost needs the durable pipeline instead,
+  and forgetting that rule causes subtle bugs.
+- Event delivery rides the main thread. Invisible at human-scale
+  traffic; a real cost at sustained high-rate publishing, with a
+  documented threshold and fix in the scaling guide.
+- Manual DI is hand-maintained. There are no compile-time
+  missing-binding errors like Dagger's; guard tests and conventions
+  stand in for them.
+- Determinism across managers is a discipline, not a guarantee. Each
+  manager is internally race-free (serial confinement), but two
+  managers have no mutual ordering; tests and choreography must
+  await facts, not assume them.
+- The router is hand-rolled. Typed and process-death-safe, but
+  predictive back, transitions, and per-screen scoping are deferred
+  to the Navigation 3 threshold.
+
+This is not Google's default architecture (ViewModel-centric state
+holders per screen). It trades that familiarity for centralized,
+observable app state; an app that is mostly independent CRUD screens
+with little cross-feature state would not earn that trade, and the
+standard stack would serve it more simply.
 
 ## Module structure
 
@@ -41,9 +98,7 @@ in ARCHITECTURE-SCALING.md.
 
 ## Architecture
 
-One process-scoped composition root wires a flat layer of peer managers
-that communicate only through a typed event bus; the UI listens and
-stays thin. As a component diagram in text:
+The component diagram in text:
 
 ```
 BaseApplication ................. the Android edge (onCreate)
