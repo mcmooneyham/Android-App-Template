@@ -63,10 +63,13 @@ object TemplateEnrichmentFlag : BooleanFlag(
     description = "Enrich template readings with derived data",
 )
 
-// STEP 3: ONE payload type carrying the feature's whole story, so a
-// single subscription tells a screen everything. Immutable, additive
-// evolution only: new fields get defaults (see the payload-evolution
-// rules in ARCHITECTURE-SCALING.md).
+// STEP 3: THE PAYLOAD. Strongly prefer bundling a feature's related
+// state into one payload type, so a single subscription tells a
+// screen the whole story; split into multiple keys with their own
+// payloads when the concerns are genuinely separate (different
+// consumers, different cadences), never just to save a field.
+// Immutable, additive evolution only: new fields get defaults (see
+// the payload-evolution rules in ARCHITECTURE-SCALING.md).
 data class TemplateState(
     val latestReading: Int? = null,
     val readingCount: Int = 0,

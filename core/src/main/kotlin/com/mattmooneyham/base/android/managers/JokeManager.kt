@@ -184,7 +184,8 @@ class JokeManager(
                 latestJoke = joke
                 JokeState(status = JokeStatus.SUCCESS)
             } catch (cancellation: CancellationException) {
-                isFetchInFlight = false
+                // Rethrow FIRST: the Exception catch below must never
+                // swallow coroutine cancellation.
                 throw cancellation
             } catch (exception: Exception) {
                 val failure = exception.toFetchFailure()
@@ -192,18 +193,23 @@ class JokeManager(
                     "Joke fetch failed [${failure.kind}]: ${failure.detail}",
                 )
                 JokeState(status = JokeStatus.FAILED, failure = failure)
+            } finally {
+                // Clears on EVERY exit, including Errors the catches
+                // never see (OOM, LinkageError) and cancellation: the
+                // supervisor keeps this scope alive after logging an
+                // Error, and a stuck flag would silently wedge every
+                // future refresh. The clear still lands BEFORE the
+                // terminal publish below (the moment a listener hears
+                // SUCCESS or FAILED, a new refresh must be accepted;
+                // that ordering is caught as a race by CI), and no
+                // suspension point separates them on this confinement.
+                isFetchInFlight = false
             }
             // A failure arms the reconnect retry (see class KDoc);
-            // written before the terminal publish like the flag below.
+            // written before the terminal publish.
             if (terminalState.status == JokeStatus.FAILED) {
                 shouldRetryOnReconnect = true
             }
-            // The flag clears BEFORE the terminal publish: the moment a
-            // listener hears SUCCESS or FAILED, a new refresh must be
-            // accepted (publishing first would open a window where an
-            // immediate reaction to the terminal state is silently
-            // dropped: caught as a race by CI).
-            isFetchInFlight = false
             publishState(terminalState)
         }
     }

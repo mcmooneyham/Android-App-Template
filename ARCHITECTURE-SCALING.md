@@ -24,6 +24,8 @@ pays for on every change.
 | Flag experiments     | the first A/B test                          |
 | Navigation 3 upgrade | ~15 destinations, the first nested/modal    |
 |                      | flow, or predictive-back needs              |
+| Non-Main bus lane    | first sustained high-rate publisher         |
+|                      | (~tens of Hz: sync progress, BLE telemetry) |
 
 Everything below refers to the shipped code by its real names:
 `AppComponent` and `AppConfig` in `di/`, `EventManager` /
@@ -434,3 +436,37 @@ shared content-swap motion. One accepted quirk of the keep-alive
 shell plus stack host: popping to a root replays that page's one-shot
 entrance animation, a deliberate simplicity trade recorded here so
 nobody "fixes" it into complexity prematurely.
+
+## 9. Non-Main event delivery
+
+Adoption threshold: the first publisher with SUSTAINED high-rate
+traffic, roughly tens of events per second (sync-pipeline progress,
+BLE telemetry). Today every listenTo delivery dispatches on Main
+(that is rule 3's contract for UI listeners), and managers hop the
+callback onto their own confinement, so each event costs one
+main-looper message plus one confinement dispatch per manager
+listener. At human-scale traffic this is invisible; at tens of Hz it
+competes with frame deadlines, and under Main congestion the
+DROP_OLDEST buffers shed deliveries, which is harmless for
+latest-wins state keys but silently loses SignalKey firings.
+
+At the threshold, two moves, in order of preference:
+
+1. MANAGERS COLLECT DIRECTLY. A manager that consumes a hot key
+   collects `typedEventsOf(key)` on its own confinement
+   (`managerScope.launch { eventManager.typedEventsOf<P>(key)
+   .collect { ... } }`), which lands delivery straight on the
+   confinement and REMOVES today's double dispatch; the collection
+   dies with the scope at close(). UI listeners stay on listenTo and
+   Main, untouched.
+2. If the weak-owner/unsubscribeOwner bookkeeping must be kept for
+   the hot subscriber, add one defaulted parameter instead:
+   `listenTo(..., deliveryContext: CoroutineContext =
+   EmptyCoroutineContext)` folded into the collector launch. Main
+   stays the default; rules 2, 4, and 5 are unaffected (one
+   sequential collector per subscription preserves per-key order,
+   and the replay cache is written synchronously inside trigger).
+
+Never solve a hot publisher with a bigger buffer: throttle or
+conflate the latest-wins projection at the SOURCE, per the section 2
+doctrine (the bus carries projections of durable state, not work).

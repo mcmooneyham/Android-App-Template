@@ -33,7 +33,11 @@ object AppModule {
     fun provideAppComponent(
         @ApplicationContext applicationContext: Context,
     ): AppComponent =
-        (applicationContext as BaseApplication).appComponent
+        // The HOST interface, not the concrete Application class:
+        // under Hilt instrumentation tooling the application is
+        // HiltTestApplication (or a @CustomTestApplication that can
+        // implement the host), so a BaseApplication cast would throw.
+        (applicationContext as AppComponentHost).appComponent
 
     @Provides
     fun provideEventManager(component: AppComponent): EventManager =

@@ -3,6 +3,7 @@ package com.mattmooneyham.base.android
 import android.app.Application
 import com.mattmooneyham.base.android.constants.LogLevel
 import com.mattmooneyham.base.android.di.AppComponent
+import com.mattmooneyham.base.android.di.AppComponentHost
 import com.mattmooneyham.base.android.di.AppConfig
 import com.mattmooneyham.base.android.platform.AndroidConnectivityMonitor
 import com.mattmooneyham.base.android.platform.AndroidLogWriter
@@ -16,14 +17,15 @@ import dagger.hilt.android.HiltAndroidApp
  * only @HiltAndroidApp here and @AndroidEntryPoint on activities.
  */
 @HiltAndroidApp
-class BaseApplication : Application() {
+class BaseApplication : Application(), AppComponentHost {
 
     /**
      * The composition root, alive for the whole process. Never closed
-     * here: it dies with the process. Instrumented tests reach the real
+     * here: it dies with the process. AppModule reads it through the
+     * [AppComponentHost] contract; instrumented tests reach the real
      * managers through this property.
      */
-    lateinit var appComponent: AppComponent
+    override lateinit var appComponent: AppComponent
         private set
 
     override fun onCreate() {

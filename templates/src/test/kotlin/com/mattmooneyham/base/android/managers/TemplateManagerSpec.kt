@@ -2,6 +2,7 @@ package com.mattmooneyham.base.android.managers
 
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagManager
+import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagsChanged
 import com.mattmooneyham.base.android.managers.featureFlagManager.NoOpFeatureFlagProvider
 import com.mattmooneyham.base.android.managers.logManager.LogFileSettings
 import com.mattmooneyham.base.android.managers.logManager.LogManager
@@ -152,12 +153,25 @@ class TemplateManagerSpec {
         runBlocking<Unit> {
             val recorder = TestEventRecorder(eventManager)
                 .record(TemplateStateChanged)
+                .record(FeatureFlagsChanged)
 
             // Flip the flag AFTER construction: the very next publish
             // must see it, proving nothing cached the answer.
             flagProvider.setFlags(
                 mapOf(TemplateEnrichmentFlag.flagKey to true),
             )
+            // DETERMINISM LESSON: the flag lands on the flag
+            // manager's confinement and the reading on this manager's;
+            // two serial dispatchers have NO mutual ordering, so a
+            // spec must AWAIT the fact it just injected before acting
+            // on it (the choreography spec's enableAutoRetry helper is
+            // the same discipline). Without this await the test is a
+            // coin flip.
+            recorder.expectStateMatching(FeatureFlagsChanged) { snapshot ->
+                snapshot.flagsByKey[TemplateEnrichmentFlag.flagKey]
+                    ?.enabled == true
+            }
+
             templatePort.emitReading(1)
 
             recorder.expectStateMatching(TemplateStateChanged) { state ->

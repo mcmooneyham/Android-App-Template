@@ -63,13 +63,18 @@ class ConnectivityManager(
             // the manager's confinement so the read-then-publish below
             // is race-free. The serial scope preserves callback order.
             managerScope.launch {
+                // Publish CHANGES only (the platform reports duplicate
+                // states routinely). Deduping makes the stream strictly
+                // alternating, which is what lets subscribers do edge
+                // detection safely over the lossy DROP_OLDEST buffer:
+                // any surviving suffix still contains every adjacency.
                 if (isConnected != mutableConnectivityState.value) {
                     logManager.info(
                         if (isConnected) "Network available"
                         else "Network lost",
                     )
+                    publishConnectivity(isConnected)
                 }
-                publishConnectivity(isConnected)
             }
         }
     }
