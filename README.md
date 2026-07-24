@@ -249,6 +249,28 @@ point at which each becomes worth doing.
   remote provider > compiled default. A debug-only sheet in Settings
   lists every flag and lets you override it on the spot. Release
   builds never even create the override store.
+
+  ```kotlin
+  // Declare a flag beside the feature it gates, and list it in
+  // AppFlags.all (a guard test fails the build if you forget).
+  object JokeAutoRetryOnReconnectFlag : BooleanFlag(
+      flagKey = "joke.autoRetryOnReconnect",
+      default = false,
+      description =
+          "Auto-refresh a failed joke when connectivity returns",
+  )
+
+  // Managers read it at decision time, never cached at
+  // construction, so provider updates and debug overrides apply
+  // to the very next decision.
+  if (featureFlagManager.isEnabled(JokeAutoRetryOnReconnectFlag)) {
+      refreshJoke()
+  }
+
+  // A composable observes it with one line.
+  val isAutoRetryEnabled by flagState(JokeAutoRetryOnReconnectFlag)
+  ```
+
 - **Crash-friendly logging**: every log line and every event on the
   bus leaves a breadcrumb, errors become non-fatals through a
   pluggable crash-reporter seam, and the rotating log file can be
