@@ -64,6 +64,73 @@ flowchart LR
     C --> S --> R --> X
 ```
 
+## Example flows
+
+The loop above, played out in time. First, an ordinary user action
+(the demo feature's refresh button):
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant View
+    participant VM as ViewModel
+    participant MGR as Manager
+    participant Bus as Event bus
+    User->>View: taps Refresh
+    View->>VM: onRefresh()
+    VM->>MGR: refresh()
+    MGR->>Bus: publish State(refreshing)
+    Bus-->>View: delivered on Main
+    Note over View: shows the spinner
+    MGR->>MGR: fetch on its own thread
+    MGR->>Bus: publish State(fresh data)
+    Bus-->>View: delivered on Main
+    Note over View: shows the content
+```
+
+Second, one manager reacting to another. Neither holds a reference to
+the other; the reaction is just a subscription (in the demo: the
+device comes back online, and a failed fetch retries itself):
+
+```mermaid
+sequenceDiagram
+    participant OS as Platform
+    participant CM as Connectivity manager
+    participant Bus as Event bus
+    participant FM as Feature manager
+    participant View
+    OS->>CM: network is back
+    CM->>Bus: publish Connectivity(online)
+    Bus-->>FM: subscribed since init
+    Note over FM: last fetch failed?<br/>then retry once
+    FM->>Bus: publish State(fresh data)
+    Bus-->>View: delivered on Main
+```
+
+Third, what the bus does for state on its own. The latest value of a
+state event is cached, so a screen that opens later gets current
+state immediately without fetching anything, and a publish that
+nobody would learn from is dropped:
+
+```mermaid
+sequenceDiagram
+    participant MGR as Manager
+    participant Bus as Event bus
+    participant NS as New screen
+    MGR->>Bus: publish State(v1)
+    Note over Bus: caches the latest value
+    NS->>Bus: subscribe (opens later)
+    Bus-->>NS: replays State(v1) right away
+    MGR->>Bus: publish State(v1) again
+    Note over Bus: equal to the cache:<br/>suppressed, nothing delivered
+    MGR->>Bus: publish State(v2)
+    Bus-->>NS: State(v2)
+```
+
+Signals (one-shot notifications) are the mirror image: never replayed
+to late subscribers and never deduped, because firing twice means it
+happened twice.
+
 ## Modules
 
 Arrows point at what a module is allowed to see. Imports in the wrong
