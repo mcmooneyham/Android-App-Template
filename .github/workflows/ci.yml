@@ -1,0 +1,125 @@
+# The CI gate, on every push and pull request: every module builds
+# and unit-tests (including :templates, which nothing depends on, so
+# CI is what keeps the exemplars honest), plus the R8 release build
+# and lint. The emulator UI-flow job is gated: flip
+# RUN_UI_TESTS_BY_DEFAULT below (or dispatch the workflow manually
+# with the input) to control whether it runs.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_ui_tests:
+        description: "Also run the emulator UI flow tests"
+        type: boolean
+        default: true
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flags:
+    name: Resolve flags
+    runs-on: ubuntu-latest
+    env:
+      # The in-file default: flip to "false" to keep pushes
+      # emulator-free and run UI tests only via manual dispatch.
+      RUN_UI_TESTS_BY_DEFAULT: "true"
+    outputs:
+      run_ui_tests: ${{ steps.resolve.outputs.run_ui_tests }}
+    steps:
+      - id: resolve
+        run: >
+          echo "run_ui_tests=${{ inputs.run_ui_tests
+          || env.RUN_UI_TESTS_BY_DEFAULT }}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build, unit tests, lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle (with build caching)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build, test, and lint every module
+        run: >
+          ./gradlew
+          :app:assembleDebug
+          :app:assembleRelease
+          :core:test
+          :ui:testDebugUnitTest
+          :app:testDebugUnitTest
+          :templates:testDebugUnitTest
+          :app:compileDebugAndroidTestKotlin
+          :templates:compileDebugAndroidTestKotlin
+          :app:lintDebug
+
+      - name: Upload reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            **/build/reports/tests/**
+            **/build/reports/lint-results-*.html
+
+  ui:
+    name: UI flows (emulator)
+    needs: [flags, build]
+    if: needs.flags.outputs.run_ui_tests == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle (with build caching)
+        uses: gradle/actions/setup-gradle@v4
+
+      # GitHub-hosted runners ship KVM but gate /dev/kvm; without
+      # this the emulator falls back to software rendering and
+      # crawls past the job timeout.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # The flow tests drive the real app against the real network;
+      # joke- and connectivity-dependent tests self-skip (JUnit
+      # assumptions) if the emulator has no usable network.
+      - name: Run instrumented flow tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          script: >
+            ./gradlew
+            :app:connectedDebugAndroidTest
+            :templates:connectedDebugAndroidTest
+
+      - name: Upload instrumented reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: instrumented-reports
+          path: |
+            **/build/reports/androidTests/**
+            **/build/outputs/androidTest-results/**

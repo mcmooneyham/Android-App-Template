@@ -1,5 +1,6 @@
-# Single-module template: the manager/API layer lives inside the app,
-# so all of its dependencies are declared here as well.
+# Shared catalog for the three-module template (:core holds the
+# manager/API layer, :ui the views, :app the composition root), so
+# every module's dependencies are declared here.
 # Tested ceiling for Kotlin 2.4.10: Gradle 9.5.0, AGP 9.1.0.
 [versions]
 androidx-test-runner = "1.6.2"
@@ -10,7 +11,11 @@ kotlin = "2.4.10"
 ksp = "2.3.10"
 hilt = "2.60.1"
 android-compileSdk = "36"
+# Template floor: Android 12L. High device coverage while skipping
+# the pre-12 compat branches (legacy backup config, older permission
+# shims); lower it per product needs, the code compiles unchanged.
 android-minSdk = "32"
+# Latest stable platform, per Play's target-API policy.
 android-targetSdk = "36"
 composeBom = "2026.06.01"
 # Newer androidx.* releases may require compileSdk 37 + AGP 9.1; keep added
@@ -18,6 +23,8 @@ composeBom = "2026.06.01"
 androidx-activity = "1.13.0"
 # material-icons was frozen at 1.7.x and dropped from the Compose BOM.
 materialIcons = "1.7.8"
+# Explicit (not transitive): FileProvider backs the log-export share.
+androidx-core = "1.16.0"
 # datastore 1.3.x is alpha; 1.2.1 is the current stable.
 datastore = "1.2.1"
 kotlinx-coroutines = "1.11.0"
@@ -26,6 +33,9 @@ kotlinx-serialization = "1.11.0"
 ktor = "3.5.1"
 # Floor set by datastore-preferences-core; used directly for log file IO.
 okio = "3.9.1"
+# JVM unit-test stack (core, ui, and app src/test), matching the
+# JUnit4 style of the instrumented tests.
+junit = "4.13.2"
 
 [libraries]
 compose-uiTestJunit4 = { module = "androidx.compose.ui:ui-test-junit4" }
@@ -40,7 +50,11 @@ compose-uiTooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-materialIconsCore = { module = "androidx.compose.material:material-icons-core", version.ref = "materialIcons" }
 # Not covered by the Compose BOM; pinned explicitly.
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
-androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+androidx-core = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
+# The -core artifacts are pure Kotlin/JVM (KMP), which is what lets
+# the managers live in the :core module with no Android classpath.
+androidx-datastore-core = { module = "androidx.datastore:datastore-core", version.ref = "datastore" }
+androidx-datastore-preferences-core = { module = "androidx.datastore:datastore-preferences-core", version.ref = "datastore" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
@@ -49,11 +63,17 @@ ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "kto
 ktor-client-contentNegotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serialization-kotlinxJson = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
+junit = { module = "junit:junit", version.ref = "junit" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
+# MockEngine backing AppConfig.httpClientFactory in JVM unit tests.
+ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
 hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "hilt" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
+androidLibrary = { id = "com.android.library", version.ref = "agp" }
+kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }

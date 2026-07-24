@@ -4,6 +4,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.mattmooneyham.base.android.MainActivity
+import com.mattmooneyham.base.android.ui.R
 import org.junit.Rule
 import org.junit.Test
 
@@ -19,15 +20,19 @@ class TabPersistenceTest {
 
     @Test
     fun homeStateSurvivesATabRoundTrip() {
-        composeRule.waitForText("Welcome back!")
+        val welcomeBack = appString(R.string.session_welcome_back)
+        composeRule.waitForText(welcomeBack)
 
-        composeRule.tabItem("Settings").performClick()
-        composeRule.waitForText("Clear welcome flag")
-        composeRule.tabItem("Home").performClick()
+        composeRule.tabItem(appString(R.string.tab_settings))
+            .performClick()
+        composeRule.waitForText(
+            appString(R.string.settings_clear_welcome_title),
+        )
+        composeRule.tabItem(appString(R.string.tab_home)).performClick()
 
         // Immediately present: no reload state allowed after the trip.
-        composeRule.onNodeWithText("Welcome back!").assertExists()
-        composeRule.onNodeWithText("Loading preferences...")
+        composeRule.onNodeWithText(welcomeBack).assertExists()
+        composeRule.onNodeWithText(appString(R.string.session_loading))
             .assertDoesNotExist()
     }
 }

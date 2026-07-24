@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Every user-facing string in the :ui module, grouped by screen.
+     Formatted strings use positional placeholders (%1$s, %1$d) so
+     translations can reorder them freely. -->
+<resources>
+
+    <!-- Bottom tab bar -->
+    <string name="tab_home">Home</string>
+    <string name="tab_settings">Settings</string>
+
+    <!-- Home page -->
+    <string name="home_title">Home</string>
+    <string name="home_hero_label">App core</string>
+    <string name="hello_headline">Hello, %1$s!</string>
+    <string name="session_row_title">Session</string>
+    <string name="session_loading">Loading preferences...</string>
+    <string name="session_welcome_back">Welcome back!</string>
+    <string name="session_first_launch">First launch</string>
+
+    <!-- Joke card -->
+    <string name="joke_card_title">Random joke</string>
+    <string name="joke_card_subtitle">Fresh from the Joke API</string>
+    <string name="joke_card_refresh_content_description">Refresh joke</string>
+    <string name="joke_error_network">Couldn\'t load a joke. Check your connection.</string>
+    <string name="joke_error_http">The joke service had a problem. Try again.</string>
+    <string name="joke_error_decode">The joke service sent an unexpected response.</string>
+    <string name="joke_error_timeout">The joke service took too long. Try again.</string>
+    <string name="joke_error_unknown">Couldn\'t load a joke. Try again.</string>
+
+    <!-- Joke detail page -->
+    <string name="back_content_description">Back</string>
+    <string name="joke_detail_title">Joke details</string>
+    <string name="joke_detail_section_title">Joke #%1$d</string>
+    <string name="joke_detail_unavailable">Couldn\'t load this joke.</string>
+    <string name="joke_detail_retry">Retry</string>
+
+    <!-- Hero card status pill -->
+    <string name="status_online">Online</string>
+    <string name="status_offline">Offline</string>
+
+    <!-- Settings page -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_preferences">Preferences</string>
+    <string name="settings_clear_welcome_title">Clear welcome flag</string>
+    <string name="settings_clear_welcome_supporting">Home shows \"First launch\" until restart</string>
+    <string name="settings_section_logs">Logs</string>
+    <string name="settings_export_logs_title">Export logs</string>
+    <string name="settings_export_logs_supporting">Share the app\'s log file contents</string>
+    <string name="settings_clear_logs_title">Clear logs</string>
+    <string name="settings_clear_logs_supporting">Delete the app\'s log file</string>
+    <string name="settings_section_about">About</string>
+    <string name="settings_version_title">Version</string>
+    <string name="settings_build_title">Build</string>
+    <string name="settings_section_debug">Debug</string>
+    <string name="settings_feature_flags_title">Feature flags</string>
+    <string name="settings_feature_flags_supporting">View and override the app\'s feature flags</string>
+
+    <!-- Clear-logs confirmation dialog -->
+    <string name="clear_logs_dialog_title">Clear logs?</string>
+    <string name="clear_logs_dialog_body">This deletes the app\'s log file and cannot be undone.</string>
+    <string name="clear_logs_dialog_confirm">Clear logs</string>
+    <string name="clear_logs_dialog_cancel">Cancel</string>
+
+    <!-- Log export share sheet -->
+    <string name="logs_export_chooser_title">Export logs</string>
+    <string name="logs_export_subject">Base App logs</string>
+    <string name="logs_export_none">No logs recorded yet.</string>
+
+    <!-- Feature-flag sheet -->
+    <string name="flag_sheet_title">Feature flags</string>
+    <string name="flag_sheet_explainer">Local overrides beat remote and default values and persist across launches. Debug builds only.</string>
+    <string name="flag_override_default">Default</string>
+    <string name="flag_override_on">On</string>
+    <string name="flag_override_off">Off</string>
+    <string name="flag_state_on">On</string>
+    <string name="flag_state_off">Off</string>
+    <string name="flag_source_default">compiled default</string>
+    <string name="flag_source_provider">remote value</string>
+    <string name="flag_source_override">local override</string>
+
+</resources>
