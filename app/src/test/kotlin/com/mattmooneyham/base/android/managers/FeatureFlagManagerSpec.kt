@@ -11,6 +11,7 @@ import com.mattmooneyham.base.android.managers.featureFlagManager.NoOpFeatureFla
 import com.mattmooneyham.base.android.managers.featureFlagManager.ResolvedFlag
 import com.mattmooneyham.base.android.managers.logManager.LogFileSettings
 import com.mattmooneyham.base.android.managers.logManager.LogManager
+import com.mattmooneyham.base.android.managers.logManager.LogSinks
 import com.mattmooneyham.base.android.testkit.FakeCrashReporter
 import com.mattmooneyham.base.android.testkit.FlakyPreferencesDataStore
 import com.mattmooneyham.base.android.testkit.TestAppContext
@@ -255,7 +256,7 @@ class FeatureFlagManagerSpec {
                     directoryPath = null,
                     fileLoggingEnabled = false,
                 ),
-                crashReporter = crashReporter,
+                sinks = LogSinks(crashReporter = crashReporter),
             )
             val eventBus = EventManager()
             val flagManager = FeatureFlagManager(

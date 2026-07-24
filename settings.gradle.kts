@@ -61,4 +61,11 @@ run {
 
 rootProject.name = "Android-App-Template"
 
+// Layered modules; the compiler is the arbiter of the layering:
+// :core (Kotlin JVM: managers, ports, api; android.* is not even on
+// the classpath) <- :ui (Android library: views, viewmodels,
+// navigation; sees only :core) <- :app (composition root, edge
+// adapters, Application/Activity; sees both).
 include(":app")
+include(":core")
+include(":ui")

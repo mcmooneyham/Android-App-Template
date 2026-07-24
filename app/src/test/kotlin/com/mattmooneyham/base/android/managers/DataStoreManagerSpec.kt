@@ -8,6 +8,7 @@ import com.mattmooneyham.base.android.managers.dataStoreManager.createPreference
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.logManager.LogFileSettings
 import com.mattmooneyham.base.android.managers.logManager.LogManager
+import com.mattmooneyham.base.android.managers.logManager.LogSinks
 import com.mattmooneyham.base.android.testkit.FakeCrashReporter
 import com.mattmooneyham.base.android.testkit.FlakyPreferencesDataStore
 import com.mattmooneyham.base.android.testkit.TestAppContext
@@ -108,7 +109,7 @@ class DataStoreManagerSpec {
                     directoryPath = null,
                     fileLoggingEnabled = false,
                 ),
-                crashReporter = crashReporter,
+                sinks = LogSinks(crashReporter = crashReporter),
             )
             val eventManager = EventManager()
             val dataStoreManager = DataStoreManager(

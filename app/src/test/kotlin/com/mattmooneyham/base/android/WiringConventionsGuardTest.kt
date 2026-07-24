@@ -21,7 +21,7 @@ class WiringConventionsGuardTest {
 
     @Test
     fun everyKeyIsTriggeredOnlyFromItsDeclaringFile() {
-        val sources = mainKotlinFiles()
+        val sources = allMainKotlinFiles()
         val declaringFileByKey = sources
             .flatMap { sourceFile ->
                 KEY_DECLARATION.findAll(commentFreeTextOf(sourceFile))
@@ -82,46 +82,11 @@ class WiringConventionsGuardTest {
         )
     }
 
-    private fun mainKotlinFiles(): List<File> =
-        resolveAppModuleDirectory()
-            .resolve("src/main/kotlin")
-            .walkTopDown()
-            .filter { candidate ->
-                candidate.isFile && candidate.extension == "kt"
-            }
-            .toList()
-
+    /** The composition root's own files live in :app. */
     private fun appSourceFile(relativePath: String): File =
-        resolveAppModuleDirectory()
-            .resolve("src/main/kotlin/com/mattmooneyham/base/android")
+        repositoryRoot()
+            .resolve("app/src/main/kotlin/com/mattmooneyham/base/android")
             .resolve(relativePath)
-
-    /**
-     * Block and line comments removed, so KDoc usage examples (the
-     * EventManager and EventKey docs both show trigger calls) never
-     * trip the scans. Line stripping truncates string literals that
-     * contain "//" (the Joke API URL), which is harmless here: none
-     * of the scanned patterns live inside strings.
-     */
-    private fun commentFreeTextOf(sourceFile: File): String =
-        sourceFile.readText()
-            .replace(BLOCK_COMMENT, "")
-            .lineSequence()
-            .joinToString("\n") { line -> line.substringBefore("//") }
-
-    /** Same working-directory probing as CompositionRootGuardTest. */
-    private fun resolveAppModuleDirectory(): File {
-        val workingDirectory = File(System.getProperty("user.dir"))
-        val candidateDirectories = listOf(
-            workingDirectory,
-            workingDirectory.resolve("app"),
-        )
-        return candidateDirectories.firstOrNull { candidate ->
-            candidate.resolve("src/main").isDirectory
-        } ?: error(
-            "Cannot locate the app module from ${workingDirectory.path}",
-        )
-    }
 
     private companion object {
         val KEY_DECLARATION =
@@ -138,8 +103,5 @@ class WiringConventionsGuardTest {
 
         /** Provider return types in AppModule: `): XManager =`. */
         val PROVIDER_RETURN = Regex("""\)\s*:\s*(\w*Manager)\s*=""")
-
-        val BLOCK_COMMENT =
-            Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
     }
 }

@@ -14,7 +14,8 @@ pays for on every change.
 | -------------------- | ------------------------------------------- |
 | SessionComponent     | the first login / account feature           |
 | Durable job pipeline | the first must-survive-process-death work   |
-| Module split         | ~10 managers, or a second team              |
+| Feature-module split | ~10 managers, or a second team (the LAYER   |
+|                      | modules :core/:ui/:app ship day-one)        |
 | Event governance     | the module split, or ~20 event keys         |
 | Lazy startup tiers   | ~15 managers, or measured cold-start cost   |
 | Payload evolution    | day one (rules, not a mechanism)            |
@@ -188,46 +189,56 @@ the table is authoritative, and the first projection publish restores
 the UI. Nothing about the bus, the keys, or the managers' topology
 changes; the pipeline slots in as one more manager plus its storage.
 
-## 3. Module split recipe
+## 3. Module layering and its expansion
 
-Adoption threshold: about 10 managers, or the moment a second team
-works in the repo. Below that, one module compiles fast enough and the
-package tree is boundary enough.
+STAGE 0 SHIPS IN THE SKELETON: a three-module layer cut whose whole
+point is that the COMPILER arbitrates the layering (see the README's
+module-structure section). `:core` is a Kotlin JVM library, so
+`android.*` imports in manager code are unresolvable, not merely
+frowned on; `:ui` depends only on `:core`, so UI code cannot reach
+the adapters or the composition root; `:app` sees everything and
+wires it. This mirrors the layer discipline of Google's app
+architecture guide (domain+data merged as `:core`, ui, app) at
+template scale, and it is why the split ships day-one rather than at
+a threshold: retrofitting a JVM core onto code that has quietly
+absorbed Android imports means untangling every file.
 
-### Target shape
+The remaining expansions each have a threshold; every one is a
+`git mv` plus one build file, because the package tree already
+mirrors the future modules:
 
-```
-:app                  composition root, Application, activity, DI
-:core                 EventManager, key base classes, ConfinedManager,
-                      LogManager, boundaries (ConnectivityMonitor,
-                      CrashReporter, Clock usage), ApiClient
-:feature-x-api        the feature's event keys, payload types, and
-                      the manager's public interface
-:feature-x-impl       the manager implementation; depends on
-                      :feature-x-api and :core
-```
+1. `:data` out of `:core` (threshold: repositories and DTO mapping
+   outgrow the `api/` package, roughly the first cache-first
+   repository). Moves `api/` plus DTO mappers; `:core` keeps
+   managers, ports, and the bus. The heuristic for the cut: if the
+   implementation only makes sense in the presence of a remote API
+   or a local DB shape, it is `:data`; if removing every transport
+   and persistence detail leaves the logic intact, it stays `:core`.
+2. `:platform` out of `:app` (threshold: the adapter count outgrows
+   a handful; today there are two). Moves the `platform/` package;
+   `:app` keeps the composition root and shell.
+3. FEATURE modules (threshold: about 10 managers, or a second team).
+   Features slice WITHIN the layers, composing with them rather than
+   replacing them: a `:feature-x-api` holds the key objects, payload
+   types, and the manager's interface; `:feature-x-impl` holds the
+   class. Consumers (UI, other features) depend only on api modules;
+   impls are wired solely in `:app`'s `AppComponent`. Cross-feature
+   choreography stays what it is today: subscribe to the other
+   feature's key from its api module; never depend on another
+   feature's impl. Split one feature as the exemplar before the
+   rest, letting dependency errors surface the couplings the merged
+   modules hid.
 
-### Recipe
+The composition root stays singular and manual at every stage: the
+splits change where types live, not how they are wired.
 
-1. Extract `:core` first: the `managers/` infrastructure
-   (`EventManager`, `EventKey.kt`, `ConfinedManager`, `LogManager`),
-   `api/` plumbing, and the boundary interfaces. `:app` keeps
-   `AppComponent`, `AppConfig`, `AppModule`, and `BaseApplication`.
-2. Split ONE feature as the exemplar, api/impl pair, before splitting
-   the rest. The api module holds what other features may see: the
-   key objects (still declared beside the manager's INTERFACE, same
-   file or same package), the payload data classes, and the interface
-   itself. The impl module holds the class.
-3. Consumers (UI, other features) depend only on api modules; impl
-   modules are wired solely in `:app`'s `AppComponent`, which now
-   constructs interfaces from impls. Cross-feature choreography stays
-   what it is today: subscribe to the other feature's key from its
-   api module; never depend on another feature's impl.
-4. Split the remaining features one at a time, letting dependency
-   errors surface the accidental couplings the single module hid.
-
-The composition root stays singular and manual: the module split
-changes where types live, not how they are wired.
+KMP note: `:core` is the commonMain candidate (its dependencies,
+including the DataStore `-core` artifacts, Ktor, okio, and the
+kotlinx libraries, are already multiplatform). It is KMP-shaped, not
+KMP-ready: the known JVM-isms needing expect/actual are the bus's
+WeakReference owner tracking, the LogManager's stack-trace call-site
+capture, and java.io.File in the storage seams. Budget for those
+three before promising a shared module.
 
 ## 4. Event governance
 

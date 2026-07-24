@@ -1,6 +1,6 @@
 package com.mattmooneyham.base.android.viewModels
 
-import com.mattmooneyham.base.android.BuildConfig
+import com.mattmooneyham.base.android.constants.BuildInfo
 import com.mattmooneyham.base.android.managers.dataStoreManager.HasSeenWelcomeChanged
 import com.mattmooneyham.base.android.managers.logManager.LogsCleared
 import com.mattmooneyham.base.android.testkit.TestAppContext
@@ -31,28 +31,33 @@ class SettingsViewModelSpec {
         testContext?.close()
     }
 
+    // Known values, so the About assertions below are EXACT (reading
+    // BuildConfig across compilation units is unassertable: its
+    // constants inline separately into app and test bytecode).
+    private val testBuildInfo = BuildInfo(
+        versionName = "1.0-test",
+        buildTimestampSeconds = 1_784_000_000L,
+        isDebugBuild = true,
+    )
+
     private fun buildViewModel(app: TestAppContext) = SettingsViewModel(
         dataStoreManager = app.component.dataStoreManager,
         logManager = app.component.logManager,
         featureFlagManager = app.component.featureFlagManager,
+        buildInfo = testBuildInfo,
     )
 
     @Test
-    fun `about values come straight from the build config`() {
+    fun `about values come straight from the injected build info`() {
         val app = startApp()
         val viewModel = buildViewModel(app)
 
-        assertEquals(BuildConfig.VERSION_NAME, viewModel.appVersionName)
-        // BUILD_TIMESTAMP_SECONDS is a compile-time constant that the
-        // compiler INLINES separately into app and test bytecode, and
-        // a stale build cache can give the two units different
-        // generations, so cross-unit equality is unassertable. Pin
-        // the contract instead: a 10-digit epoch-seconds stamp.
-        assertTrue(
-            "buildTimestampSeconds must be an epoch-seconds stamp",
-            viewModel.buildTimestampSeconds in
-                1_600_000_000L..9_999_999_999L,
+        assertEquals(testBuildInfo.versionName, viewModel.appVersionName)
+        assertEquals(
+            testBuildInfo.buildTimestampSeconds,
+            viewModel.buildTimestampSeconds,
         )
+        assertTrue(viewModel.isDebugBuild)
     }
 
     @Test

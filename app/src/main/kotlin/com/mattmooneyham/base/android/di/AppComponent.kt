@@ -10,6 +10,7 @@ import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagMan
 import com.mattmooneyham.base.android.managers.JokeManager
 import com.mattmooneyham.base.android.managers.logManager.LogFileSettings
 import com.mattmooneyham.base.android.managers.logManager.LogManager
+import com.mattmooneyham.base.android.managers.logManager.LogSinks
 import com.mattmooneyham.base.android.managers.connectivityManager.NetworkManager
 import com.mattmooneyham.base.android.managers.dataStoreManager.createDataStoreScope
 import com.mattmooneyham.base.android.managers.dataStoreManager.createPreferencesDataStore
@@ -93,7 +94,10 @@ class AppComponent(config: AppConfig) {
         minimumLogLevel = config.minimumLogLevel,
         eventManager = eventManager,
         clock = config.clock,
-        crashReporter = config.crashReporter,
+        sinks = LogSinks(
+            platformWriter = config.platformLogWriter,
+            crashReporter = config.crashReporter,
+        ),
     ).registered()
 
     init {

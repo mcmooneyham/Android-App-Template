@@ -3,8 +3,8 @@ package com.mattmooneyham.base.android.testkit
 import com.mattmooneyham.base.android.constants.LogLevel
 import com.mattmooneyham.base.android.di.AppComponent
 import com.mattmooneyham.base.android.di.AppConfig
-import com.mattmooneyham.base.android.di.CrashReporter
-import com.mattmooneyham.base.android.di.NoOpCrashReporter
+import com.mattmooneyham.base.android.managers.logManager.CrashReporter
+import com.mattmooneyham.base.android.managers.logManager.NoOpCrashReporter
 import com.mattmooneyham.base.android.managers.logManager.LogManager
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine

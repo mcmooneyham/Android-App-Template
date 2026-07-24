@@ -2,6 +2,8 @@ package com.mattmooneyham.base.android.di
 
 import android.content.Context
 import com.mattmooneyham.base.android.BaseApplication
+import com.mattmooneyham.base.android.BuildConfig
+import com.mattmooneyham.base.android.constants.BuildInfo
 import com.mattmooneyham.base.android.managers.dataStoreManager.DataStoreManager
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagManager
@@ -52,6 +54,15 @@ object AppModule {
     fun provideFeatureFlagManager(
         component: AppComponent,
     ): FeatureFlagManager = component.featureFlagManager
+
+    // App build metadata for the :ui module, which owns no application
+    // BuildConfig of its own; plain data, not a component member.
+    @Provides
+    fun provideBuildInfo(): BuildInfo = BuildInfo(
+        versionName = BuildConfig.VERSION_NAME,
+        buildTimestampSeconds = BuildConfig.BUILD_TIMESTAMP_SECONDS,
+        isDebugBuild = BuildConfig.DEBUG,
+    )
 
     // No ApiClient provider: clients are per-endpoint values owned by
     // their managers (see JokeManager), not shared graph members.

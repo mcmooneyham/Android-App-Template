@@ -1,12 +1,38 @@
 # Android-App-Template
 
 A standalone, production-shaped Android app template: native Jetpack
-Compose UI on top of an event-driven manager core. Everything lives in
-one Gradle module and one package tree (readable in an afternoon), and
-every mechanism is one a two-person team starting an app would actually
-use. Designs the template deliberately defers live in
+Compose UI on top of an event-driven manager core. Three Gradle
+modules enforce the layering at compile time while the whole tree
+stays readable in an afternoon, and every mechanism is one a
+two-person team starting an app would actually use. Designs the
+template deliberately defers live in
 [ARCHITECTURE-SCALING.md](ARCHITECTURE-SCALING.md), each with an
 explicit adoption threshold.
+
+## Module structure
+
+THE COMPILER IS THE ARBITER of the layering; cross-layer imports are
+build failures, not review comments:
+
+- `:core` (Kotlin JVM library): the managers, the event bus, the port
+  interfaces, and the API layer. `android.*` / `androidx.*` are not
+  on the classpath, so platform code physically cannot creep in;
+  everything platform-shaped arrives through ports. Ships the testkit
+  (fakes, recorder) to the other modules as Gradle testFixtures.
+- `:ui` (Android library): views, viewmodels, navigation, theme.
+  Depends ONLY on `:core`, so UI composes manager interfaces and can
+  never reach the `:app` edge (adapters, Hilt wiring, the composition
+  root).
+- `:app` (Android application): the composition root (`AppComponent`
+  in `di/`), the platform adapters (`platform/`:
+  `AndroidConnectivityMonitor`, `AndroidLogWriter`), `Application`,
+  the single `Activity`, manifest, and resources. Depends on both.
+
+Which module does a file go in: if it needs `android.*`, it is an
+adapter (`:app/platform`) or UI (`:ui`); if removing every platform
+detail leaves the logic intact, it is `:core`. The staged expansion
+to more modules (`:data`, `:platform`, feature modules) is documented
+in ARCHITECTURE-SCALING.md.
 
 ## Architecture
 
@@ -230,11 +256,18 @@ needs to react to another manager's events.
 
 ### Boundaries and crash safety
 
-- `ConnectivityMonitor` (`managers/ConnectivityMonitor.kt`) isolates
-  the platform's connectivity machinery; `AndroidConnectivityMonitor`
-  is the real adapter, tests inject a fake and drive changes by hand.
+- `ConnectivityMonitor` (in `:core`) isolates the platform's
+  connectivity machinery; `AndroidConnectivityMonitor` (in
+  `:app/platform`) is the real adapter, tests inject a fake and drive
+  changes by hand. `PlatformLogWriter` is the same shape for the
+  Logcat mirror (`AndroidLogWriter`); JVM tests keep its no-op
+  default. Ports live in `:core`, where the missing Android classpath
+  makes the isolation structural.
 - `Clock` (from `kotlin.time`) is injected via `AppConfig` wherever
   wall time is read (log timestamps), so tests can pin time.
+- `BuildInfo` (versionName, build stamp, isDebugBuild) is constructed
+  from BuildConfig in `:app` and injected into the UI layer, which
+  has no application BuildConfig of its own.
 - `CrashReporter` (`di/CrashReporter.kt`) is the crash-backend seam
   (its KDoc carries copy-paste Crashlytics and Sentry shapes). The
   component's handler calls `recordFatal`; everything else funnels
@@ -348,7 +381,9 @@ on the same shared engine.
 Kotlin 2.4.10, AGP 9.0.1 (built-in Kotlin; do NOT apply
 `org.jetbrains.kotlin.android`), Gradle 9.1.0, compileSdk 36, minSdk 32,
 Hilt 2.60.1 + KSP, Compose BOM 2026.06.01, Ktor 3.5.1 (OkHttp engine),
-DataStore 1.2.1, kotlinx-serialization, kotlinx-datetime, okio.
+DataStore 1.2.1 (the `-core` KMP artifacts, which is what lets the
+managers live in `:core`), kotlinx-serialization, kotlinx-datetime,
+okio.
 
 ## Build
 
@@ -361,12 +396,18 @@ No external checkouts required; this repo is self-contained.
 ## Tests
 
 JVM unit tests exercise a REAL `AppComponent` per test with boundary
-fakes only (`app/src/test`):
+fakes only. They span the modules: `:core` holds the bus-contract,
+recorder, and retry specs (plain JVM, no AGP), `:ui` holds the router
+spec, and `:app` holds the component-level specs and the guards:
 
 ```
-./gradlew :app:testDebugUnitTest
+./gradlew :core:test :ui:testDebugUnitTest :app:testDebugUnitTest
 ```
 
+- The fakes, the recorder, and `awaitTrue` live in `:core`'s
+  testFixtures, consumed everywhere via
+  `testFixtures(project(":core"))`; `TestAppContext` itself lives in
+  `:app`'s tests because it builds the real `AppComponent`.
 - `testkit/TestAppContext` builds the component from `AppConfig` with
   a Ktor MockEngine (`FakeJokeApi`), a `FakeConnectivityMonitor`, a
   unique temp directory per test for the real DataStore and log file,

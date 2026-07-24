@@ -18,41 +18,37 @@ kotlin {
 }
 
 dependencies {
+    // The layered modules: :core (managers, ports, api; Kotlin JVM)
+    // and :ui (views, viewmodels, navigation). This module holds the
+    // composition root, the platform adapters, and the app shell.
+    implementation(project(":core"))
+    implementation(project(":ui"))
+
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
-    implementation(libs.compose.material3)
-    implementation(libs.compose.materialIconsCore)
-    implementation(libs.compose.uiToolingPreview)
-    debugImplementation(libs.compose.uiTooling)
-
     implementation(libs.androidx.activity.compose)
     // FileProvider for the log-export share (declared explicitly:
     // relying on a transitive edge for a manifest-declared class is
     // fragile).
     implementation(libs.androidx.core)
-
-    // Manager/API layer (managers, api, constants packages).
-    implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.kotlinx.datetime)
+    // AppComponent builds the shared Json for the HTTP client factory.
     implementation(libs.kotlinx.serialization.json)
-    implementation(libs.androidx.datastore.preferences)
-    implementation(libs.okio)
-    implementation(libs.ktor.client.core)
-    implementation(libs.ktor.client.okhttp)
-    implementation(libs.ktor.client.contentNegotiation)
-    implementation(libs.ktor.serialization.kotlinxJson)
 
-    // Hilt injects the managers; their bindings live in di/AppModule.
+    // Hilt exposes the component's members to @Inject sites; the
+    // bindings live in di/AppModule.
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    // JVM unit tests (app/src/test): the architecture guard plus the
-    // manager, event-contract, and choreography specs, all running a
-    // real AppComponent with boundary fakes (see testkit/). The Ktor
+    // JVM unit tests (app/src/test): the architecture guards plus the
+    // component-level specs, all running a real AppComponent with the
+    // boundary fakes shipped by :core's testFixtures. The Ktor
     // MockEngine backs AppConfig.httpClientFactory.
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.ktor.client.contentNegotiation)
+    testImplementation(libs.ktor.serialization.kotlinxJson)
+    testImplementation(testFixtures(project(":core")))
 
     // Instrumented flow tests drive the REAL app (real Hilt, real
     // managers, real DataStore); no test doubles anywhere.

@@ -15,18 +15,13 @@ class FeatureFlagRegistryGuardTest {
 
     @Test
     fun everyDeclaredFlagIsListedInTheRegistry() {
-        val mainKotlinRoot = resolveAppModuleDirectory()
-            .resolve("src/main/kotlin")
-        val declaredFlagNames = mainKotlinRoot.walkTopDown()
-            .filter { candidate ->
-                candidate.isFile && candidate.extension == "kt"
-            }
+        val mainKotlinFiles = allMainKotlinFiles()
+        val declaredFlagNames = mainKotlinFiles
             .flatMap { sourceFile ->
                 FLAG_DECLARATION_PATTERN
                     .findAll(sourceFile.readText())
                     .map { match -> match.groupValues[1] }
             }
-            .toList()
         assertTrue(
             "The guard found no BooleanFlag declarations; either the " +
                 "flag system was removed (delete this guard) or the " +
@@ -34,9 +29,9 @@ class FeatureFlagRegistryGuardTest {
             declaredFlagNames.isNotEmpty(),
         )
 
-        val registryFile = mainKotlinRoot.walkTopDown()
+        val registryFile = mainKotlinFiles
             .firstOrNull { candidate -> candidate.name == "AppFlags.kt" }
-            ?: error("AppFlags.kt not found under src/main/kotlin")
+            ?: error("AppFlags.kt not found in any module's main sources")
         val registrySource = registryFile.readText()
 
         val unregisteredFlagNames = declaredFlagNames
@@ -45,20 +40,6 @@ class FeatureFlagRegistryGuardTest {
             "Every declared flag must be listed in AppFlags.all; " +
                 "missing: $unregisteredFlagNames",
             unregisteredFlagNames.isEmpty(),
-        )
-    }
-
-    /** Same working-directory probing as CompositionRootGuardTest. */
-    private fun resolveAppModuleDirectory(): File {
-        val workingDirectory = File(System.getProperty("user.dir"))
-        val candidateDirectories = listOf(
-            workingDirectory,
-            workingDirectory.resolve("app"),
-        )
-        return candidateDirectories.firstOrNull { candidate ->
-            candidate.resolve("src/main").isDirectory
-        } ?: error(
-            "Cannot locate the app module from ${workingDirectory.path}",
         )
     }
 

@@ -4,6 +4,7 @@ import com.mattmooneyham.base.android.constants.LogLevel
 import com.mattmooneyham.base.android.managers.eventManager.StateKey
 import com.mattmooneyham.base.android.managers.logManager.LogFileSettings
 import com.mattmooneyham.base.android.managers.logManager.LogManager
+import com.mattmooneyham.base.android.managers.logManager.LogSinks
 import com.mattmooneyham.base.android.managers.logManager.LoggedError
 import com.mattmooneyham.base.android.testkit.FakeCrashReporter
 import com.mattmooneyham.base.android.testkit.TestAppContext
@@ -191,7 +192,7 @@ class LogManagerReportingSpec {
             fileSettings = LogFileSettings(
                 directoryPath = blockerFile.absolutePath,
             ),
-            crashReporter = reporter,
+            sinks = LogSinks(crashReporter = reporter),
         )
         try {
             // ERROR drains synchronously, so both failed appends run

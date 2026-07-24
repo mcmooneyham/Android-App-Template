@@ -6,22 +6,20 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.tooling.preview.Preview
-import com.mattmooneyham.base.android.navigation.AppTab
 import com.mattmooneyham.base.android.viewModels.MainViewModel
 import com.mattmooneyham.base.android.viewModels.SettingsViewModel
 import com.mattmooneyham.base.android.views.BaseAppTheme
+import com.mattmooneyham.base.android.views.LocalEventManager
 import com.mattmooneyham.base.android.views.NavigationBar
-import com.mattmooneyham.base.android.views.NavigationBarScaffold
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
-import com.mattmooneyham.base.android.managers.eventManager.LocalEventManager
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
+// The activity's shell preview lives with the scaffold in :ui
+// (NavigationBarScaffoldPreview); this file holds no composables of
+// its own.
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
@@ -76,20 +74,5 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         pendingDeepLinkUrl.value = intent.dataString
-    }
-}
-
-// Previews the activity's shell (tab scaffold) with placeholder content;
-// the real pages need Hilt viewmodels and have their own content previews.
-@Preview(showBackground = true)
-@Composable
-private fun MainActivityContentPreview() {
-    BaseAppTheme {
-        NavigationBarScaffold(
-            selectedTab = AppTab.HOME,
-            onTabSelected = {},
-        ) {
-            Text(text = "Home preview")
-        }
     }
 }

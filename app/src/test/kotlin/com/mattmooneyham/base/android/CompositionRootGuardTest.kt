@@ -50,17 +50,11 @@ class CompositionRootGuardTest {
 
     @Test
     fun mainSourcesContainNoOwnSdkTerminology() {
-        val mainKotlinRoot = resolveAppModuleDirectory()
-            .resolve("src/main/kotlin")
-        val kotlinFiles = mainKotlinRoot.walkTopDown()
-            .filter { candidate ->
-                candidate.isFile && candidate.extension == "kt"
-            }
-            .toList()
+        val kotlinFiles = allMainKotlinFiles()
         assertTrue(
-            "The guard found no Kotlin files under src/main/kotlin; " +
-                "its source-root lookup is broken and the guard is " +
-                "vacuous",
+            "The guard found no Kotlin files under any module's " +
+                "src/main/kotlin; its source-root lookup is broken " +
+                "and the guard is vacuous",
             kotlinFiles.isNotEmpty(),
         )
 
@@ -95,33 +89,14 @@ class CompositionRootGuardTest {
         )
     }
 
-    /** The existing source sets under app/src, minus this test's own. */
-    private fun guardedSourceRoots(): List<File> {
-        val appModuleDirectory = resolveAppModuleDirectory()
-        return GUARDED_SOURCE_SETS
-            .map { sourceSetName ->
-                appModuleDirectory.resolve("src/$sourceSetName")
+    /** Shipped source sets across all modules, minus test sets
+     * (which hold these guards). */
+    private fun guardedSourceRoots(): List<File> =
+        GUARDED_SOURCE_SETS
+            .map { sourceSetPath ->
+                repositoryRoot().resolve(sourceSetPath)
             }
             .filter { sourceRoot -> sourceRoot.isDirectory }
-    }
-
-    /**
-     * Gradle runs JVM unit tests with user.dir at the module directory
-     * (ROOT/app); an IDE may use the repository root instead. Probe
-     * both so the guard never silently scans nothing.
-     */
-    private fun resolveAppModuleDirectory(): File {
-        val workingDirectory = File(System.getProperty("user.dir"))
-        val candidateDirectories = listOf(
-            workingDirectory,
-            workingDirectory.resolve("app"),
-        )
-        return candidateDirectories.firstOrNull { candidate ->
-            candidate.resolve("src/main").isDirectory
-        } ?: error(
-            "Cannot locate the app module from ${workingDirectory.path}",
-        )
-    }
 
     private companion object {
         // Assembled from halves so this file itself would not trip a
@@ -145,8 +120,14 @@ class CompositionRootGuardTest {
             "sdk.dir",
         )
 
-        // src/test is deliberately absent: it holds this guard.
-        val GUARDED_SOURCE_SETS = listOf("main", "androidTest")
+        // Test source sets are deliberately absent: they hold the
+        // guards themselves.
+        val GUARDED_SOURCE_SETS = listOf(
+            "core/src/main",
+            "ui/src/main",
+            "app/src/main",
+            "app/src/androidTest",
+        )
 
         // Text formats that can carry code or docs; binaries (launcher
         // icons and the like) are skipped rather than read as text.

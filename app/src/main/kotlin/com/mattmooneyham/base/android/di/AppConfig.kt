@@ -5,7 +5,11 @@ import com.mattmooneyham.base.android.constants.LogLevel
 import com.mattmooneyham.base.android.managers.connectivityManager.ConnectivityMonitor
 import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagProvider
 import com.mattmooneyham.base.android.managers.featureFlagManager.NoOpFeatureFlagProvider
+import com.mattmooneyham.base.android.managers.logManager.CrashReporter
 import com.mattmooneyham.base.android.managers.logManager.LogManager
+import com.mattmooneyham.base.android.managers.logManager.NoOpCrashReporter
+import com.mattmooneyham.base.android.managers.logManager.NoOpPlatformLogWriter
+import com.mattmooneyham.base.android.managers.logManager.PlatformLogWriter
 import io.ktor.client.HttpClient
 import java.io.File
 import kotlin.time.Clock
@@ -43,6 +47,9 @@ import kotlinx.serialization.json.Json
  *   it. Defaults to a no-op.
  * @param maxLogFileSizeBytes size at which the log file rotates to
  *   its single ".1" history file.
+ * @param platformLogWriter the platform log mirror; production passes
+ *   the AndroidLogWriter (Logcat) adapter built in BaseApplication,
+ *   JVM tests keep the no-op default.
  * @param featureFlagProvider remote flag backend seam; the no-op
  *   default supplies nothing, so compiled defaults (and debug
  *   overrides) decide every flag.
@@ -60,6 +67,7 @@ data class AppConfig(
     val clock: Clock = Clock.System,
     val crashReporter: CrashReporter = NoOpCrashReporter,
     val maxLogFileSizeBytes: Long = LogManager.DEFAULT_MAX_LOG_FILE_BYTES,
+    val platformLogWriter: PlatformLogWriter = NoOpPlatformLogWriter,
     val featureFlagProvider: FeatureFlagProvider = NoOpFeatureFlagProvider,
     val featureFlagOverridesEnabled: Boolean = false,
 )

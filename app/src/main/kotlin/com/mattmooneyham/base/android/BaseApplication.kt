@@ -4,7 +4,8 @@ import android.app.Application
 import com.mattmooneyham.base.android.constants.LogLevel
 import com.mattmooneyham.base.android.di.AppComponent
 import com.mattmooneyham.base.android.di.AppConfig
-import com.mattmooneyham.base.android.managers.connectivityManager.AndroidConnectivityMonitor
+import com.mattmooneyham.base.android.platform.AndroidConnectivityMonitor
+import com.mattmooneyham.base.android.platform.AndroidLogWriter
 import dagger.hilt.android.HiltAndroidApp
 
 /**
@@ -33,6 +34,7 @@ class BaseApplication : Application() {
             AppConfig(
                 appFilesDirectory = filesDir,
                 connectivityMonitor = AndroidConnectivityMonitor(this),
+                platformLogWriter = AndroidLogWriter(),
                 // Debug builds log everything; release keeps INFO and
                 // above, so trigger traces vanish from production.
                 minimumLogLevel = if (BuildConfig.DEBUG) {
