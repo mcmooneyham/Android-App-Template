@@ -649,7 +649,6 @@ class LogManager(
         .format(LOG_TIMESTAMP_FORMAT)
 
     companion object {
-        // Single-point rename: the actual stem lives in AppNames.
         const val DEFAULT_LOG_FILE_NAME = AppNames.LOG_FILE_NAME
 
         // Rotation cap: two files of this size is ample demo/support

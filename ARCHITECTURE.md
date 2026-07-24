@@ -358,7 +358,15 @@ ARCHITECTURE-SCALING.md):
   from `EventManagerCompose.kt`, backed by the `LocalEventManager`
   CompositionLocal that `MainActivity` provides).
 - `animations/AppAnimations.kt`: ALL motion definitions live here.
-- `constants/`: `BrandColors` semantic tokens (`LogLevel` lives in
+- `designSystem/`: the design tokens. `AppSpacing` (the 4-point scale
+  plus semantic aliases like `screenEdge` and `cardPadding`),
+  `AppTypography` (the explicit type scale MaterialTheme serves, with
+  `AppFontFamily` as the one-line brand-font swap point), `AppShapes`
+  (the corner language), and `AppDimens` (icon, tile, and tab-bar
+  metrics). Views consume tokens, never raw dp/sp; a rhythm or type
+  change is one edit here.
+- `constants/`: `BrandColors` semantic tokens, mapped onto the
+  Material color scheme in `BaseAppTheme` (`LogLevel` lives in
   `:core`'s constants package).
 - Localization: user-facing copy lives in string resources (`:ui`'s
   and `:templates`' `res/values/strings.xml`), read via

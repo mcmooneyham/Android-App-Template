@@ -12,8 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
-// DataStore requires the .preferences_pb extension (checked at
-// runtime); the actual name lives in AppNames for single-point rename.
+// DataStore requires the .preferences_pb extension; checked at runtime.
 const val DATA_STORE_FILE_NAME = AppNames.PREFERENCES_STORE_FILE_NAME
 
 /**

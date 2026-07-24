@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import com.mattmooneyham.base.android.views.BaseAppTheme
 import com.mattmooneyham.base.android.animations.AppAnimations
 import com.mattmooneyham.base.android.constants.BrandColors
+import com.mattmooneyham.base.android.designSystem.AppSpacing
 
 /**
  * Pill indicator for a binary status (online/offline, enabled/disabled).
@@ -47,7 +48,10 @@ fun StatusChip(
                 color = statusColor.copy(alpha = 0.14f),
                 shape = CircleShape,
             )
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(
+                horizontal = AppSpacing.md,
+                vertical = AppSpacing.contentGapSmall,
+            ),
     ) {
         Box(
             modifier = Modifier
@@ -58,7 +62,7 @@ fun StatusChip(
             text = if (isPositive) positiveText else negativeText,
             style = MaterialTheme.typography.labelLarge,
             color = statusColor,
-            modifier = Modifier.padding(start = 8.dp),
+            modifier = Modifier.padding(start = AppSpacing.sm),
         )
     }
 }

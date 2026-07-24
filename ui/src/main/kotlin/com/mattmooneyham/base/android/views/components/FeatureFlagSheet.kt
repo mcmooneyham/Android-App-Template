@@ -24,9 +24,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import com.mattmooneyham.base.android.ui.R
 import com.mattmooneyham.base.android.constants.BrandColors
+import com.mattmooneyham.base.android.designSystem.AppSpacing
 import com.mattmooneyham.base.android.managers.jokeManager.JokeAutoRetryOnReconnectFlag
 import com.mattmooneyham.base.android.managers.featureFlagManager.BooleanFlag
 import com.mattmooneyham.base.android.managers.featureFlagManager.FlagSource
@@ -68,7 +68,7 @@ fun FeatureFlagSheetContent(
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = AppSpacing.screenEdge),
     ) {
         Text(
             text = stringResource(R.string.flag_sheet_title),
@@ -80,17 +80,18 @@ fun FeatureFlagSheetContent(
             text = stringResource(R.string.flag_sheet_explainer),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
+            modifier = Modifier.padding(top = AppSpacing.xs),
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(AppSpacing.sectionGap))
 
         SettingsGroupCard {
             flagRows.forEachIndexed { rowIndex, flagRow ->
                 if (rowIndex > 0) {
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp),
+                        modifier = Modifier
+                            .padding(horizontal = AppSpacing.lg),
                     )
                 }
                 FeatureFlagRow(
@@ -102,7 +103,7 @@ fun FeatureFlagSheetContent(
 
         Spacer(
             modifier = Modifier
-                .height(24.dp)
+                .height(AppSpacing.pageBottom)
                 .navigationBarsPadding(),
         )
     }
@@ -125,7 +126,10 @@ private fun FeatureFlagRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(
+                horizontal = AppSpacing.lg,
+                vertical = AppSpacing.contentGapLarge,
+            ),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
@@ -144,7 +148,7 @@ private fun FeatureFlagRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(AppSpacing.md))
             // Live resolved state; animates between the brand success
             // and danger colors as overrides are applied.
             StatusChip(
@@ -154,7 +158,7 @@ private fun FeatureFlagRow(
             )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(AppSpacing.md))
 
         // Brand at 14% fill for the active segment, matching the tab
         // bar's selection pill.

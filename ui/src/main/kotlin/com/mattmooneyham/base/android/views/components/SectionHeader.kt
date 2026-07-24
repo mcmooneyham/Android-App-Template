@@ -7,7 +7,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.mattmooneyham.base.android.designSystem.AppSpacing
+import com.mattmooneyham.base.android.designSystem.SectionHeaderLetterSpacing
 import com.mattmooneyham.base.android.views.BaseAppTheme
 
 /** Uppercase section label used to group cards on a settings screen. */
@@ -19,12 +20,12 @@ fun SectionHeader(
     Text(
         text = title.uppercase(),
         style = MaterialTheme.typography.labelMedium,
-        letterSpacing = 1.2.sp,
+        letterSpacing = SectionHeaderLetterSpacing,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier.padding(
-            start = 8.dp,
+            start = AppSpacing.sm,
             top = 24.dp,
-            bottom = 8.dp,
+            bottom = AppSpacing.sm,
         ),
     )
 }

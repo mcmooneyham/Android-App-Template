@@ -101,8 +101,6 @@ class AppRouter(
     }
 
     private companion object {
-        // Single-point rename: the scheme lives in AppNames (which
-        // also documents the manifest literal that must mirror it).
         const val DEEP_LINK_SCHEME = AppNames.DEEP_LINK_SCHEME
         const val JOKE_DEEP_LINK_HOST = "joke"
     }

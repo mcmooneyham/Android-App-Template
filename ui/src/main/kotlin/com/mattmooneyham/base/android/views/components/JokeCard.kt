@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Refresh
@@ -40,6 +39,9 @@ import androidx.compose.ui.unit.dp
 import com.mattmooneyham.base.android.ui.R
 import com.mattmooneyham.base.android.animations.AppAnimations
 import com.mattmooneyham.base.android.animations.skeletonPulseAlpha
+import com.mattmooneyham.base.android.designSystem.AppDimens
+import com.mattmooneyham.base.android.designSystem.AppShapes
+import com.mattmooneyham.base.android.designSystem.AppSpacing
 import com.mattmooneyham.base.android.views.BaseAppTheme
 import com.mattmooneyham.base.android.constants.BrandColors
 
@@ -47,6 +49,10 @@ import com.mattmooneyham.base.android.constants.BrandColors
 // its own identity next to the BRAND-blue chrome.
 private val JokeAccent = Color(BrandColors.MAGIC)
 private val RefreshTint = Color(BrandColors.BRAND)
+
+// Height of one skeleton placeholder line; AppShapes.skeletonLine's
+// radius is half of it, keeping the line fully pill-ended.
+private val SkeletonLineHeight = 14.dp
 
 /**
  * Demo REST card: an icon-tile header matching the SettingsRow language,
@@ -69,12 +75,12 @@ fun JokeCard(
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(24.dp),
+        shape = AppShapes.card,
         modifier = modifier
             .fillMaxWidth()
             .testTag("JokeCard")
             // Clip BEFORE clickable so the ripple honors the shape.
-            .clip(RoundedCornerShape(24.dp))
+            .clip(AppShapes.card)
             .then(
                 if (onOpenDetails != null) {
                     Modifier.clickable { onOpenDetails() }
@@ -83,25 +89,25 @@ fun JokeCard(
                 },
             ),
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column(modifier = Modifier.padding(AppSpacing.cardPadding)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(34.dp)
+                        .size(AppDimens.iconTileSize)
                         .background(
                             color = JokeAccent.copy(alpha = 0.12f),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = AppShapes.iconTile,
                         ),
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Face,
                         contentDescription = null,
                         tint = JokeAccent,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(AppDimens.iconMedium),
                     )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(AppSpacing.md))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = stringResource(R.string.joke_card_title),
@@ -115,12 +121,12 @@ fun JokeCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                // Fixed 40dp slot: the spinner replaces the refresh icon
+                // Fixed action slot: the spinner replaces the refresh icon
                 // inside the same circle, so nothing shifts while loading.
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(AppDimens.actionSlotSize)
                         .background(
                             color = RefreshTint.copy(alpha = 0.12f),
                             shape = CircleShape,
@@ -130,7 +136,7 @@ fun JokeCard(
                         CircularProgressIndicator(
                             color = RefreshTint,
                             strokeWidth = 2.dp,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(AppDimens.iconMedium),
                         )
                     } else {
                         IconButton(onClick = onRefresh) {
@@ -141,14 +147,15 @@ fun JokeCard(
                                         .joke_card_refresh_content_description,
                                 ),
                                 tint = RefreshTint,
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier
+                                    .size(AppDimens.iconLarge),
                             )
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(AppSpacing.contentGapLarge))
 
             if (setup != null && punchline != null) {
                 // Keyed on the setup so a fresh joke plays the same swap
@@ -165,7 +172,10 @@ fun JokeCard(
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(
+                            modifier = Modifier
+                                .height(AppSpacing.contentGapMedium),
+                        )
                         // Punchline as a quote: a slim accent bar ties it
                         // to the card's MAGIC identity.
                         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
@@ -175,10 +185,13 @@ fun JokeCard(
                                     .fillMaxHeight()
                                     .background(
                                         color = JokeAccent.copy(alpha = 0.5f),
-                                        shape = RoundedCornerShape(2.dp),
+                                        shape = AppShapes.accentBar,
                                     ),
                             )
-                            Spacer(modifier = Modifier.width(10.dp))
+                            Spacer(
+                                modifier = Modifier
+                                    .width(AppSpacing.contentGapMedium),
+                            )
                             Text(
                                 text = currentPunchline,
                                 style = MaterialTheme.typography.bodyMedium,
@@ -198,21 +211,27 @@ fun JokeCard(
                 val pulseAlpha = skeletonPulseAlpha()
                 Column(modifier = Modifier.alpha(pulseAlpha)) {
                     SkeletonLine(widthFraction = 0.9f)
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(
+                        modifier = Modifier
+                            .height(AppSpacing.contentGapMedium),
+                    )
                     SkeletonLine(widthFraction = 0.55f)
                 }
             }
 
             if (errorMessage != null) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(AppSpacing.md))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Filled.Warning,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(14.dp),
+                        modifier = Modifier.size(AppDimens.iconSmall),
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(
+                        modifier = Modifier
+                            .width(AppSpacing.contentGapSmall),
+                    )
                     Text(
                         text = errorMessage,
                         style = MaterialTheme.typography.bodySmall,
@@ -230,10 +249,10 @@ internal fun SkeletonLine(widthFraction: Float) {
     Box(
         modifier = Modifier
             .fillMaxWidth(widthFraction)
-            .height(14.dp)
+            .height(SkeletonLineHeight)
             .background(
                 color = MaterialTheme.colorScheme.outlineVariant,
-                shape = RoundedCornerShape(7.dp),
+                shape = AppShapes.skeletonLine,
             ),
     )
 }

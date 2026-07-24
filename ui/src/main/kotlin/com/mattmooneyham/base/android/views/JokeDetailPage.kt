@@ -25,9 +25,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import com.mattmooneyham.base.android.ui.R
 import com.mattmooneyham.base.android.animations.skeletonPulseAlpha
+import com.mattmooneyham.base.android.designSystem.AppSpacing
 import com.mattmooneyham.base.android.managers.jokeManager.JokeDetailChanged
 import com.mattmooneyham.base.android.managers.jokeManager.JokeStatus
 import com.mattmooneyham.base.android.views.components.SectionHeader
@@ -80,11 +80,11 @@ private fun JokeDetailContent(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = AppSpacing.screenEdge),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(top = 4.dp),
+            modifier = Modifier.padding(top = AppSpacing.xs),
         ) {
             IconButton(onClick = onBack) {
                 Icon(
@@ -95,7 +95,7 @@ private fun JokeDetailContent(
                     tint = MaterialTheme.colorScheme.onBackground,
                 )
             }
-            Spacer(modifier = Modifier.width(4.dp))
+            Spacer(modifier = Modifier.width(AppSpacing.xs))
             Text(
                 text = stringResource(R.string.joke_detail_title),
                 style = MaterialTheme.typography.headlineLarge,
@@ -112,14 +112,19 @@ private fun JokeDetailContent(
         SettingsGroupCard {
             when {
                 setup != null && punchline != null -> {
-                    Column(modifier = Modifier.padding(20.dp)) {
+                    Column(
+                        modifier = Modifier.padding(AppSpacing.cardPadding),
+                    ) {
                         Text(
                             text = setup,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(
+                            modifier = Modifier
+                                .height(AppSpacing.contentGapMedium),
+                        )
                         Text(
                             text = punchline,
                             style = MaterialTheme.typography.bodyMedium,
@@ -129,7 +134,9 @@ private fun JokeDetailContent(
                     }
                 }
                 status == JokeStatus.FAILED -> {
-                    Column(modifier = Modifier.padding(20.dp)) {
+                    Column(
+                        modifier = Modifier.padding(AppSpacing.cardPadding),
+                    ) {
                         Text(
                             text = stringResource(
                                 R.string.joke_detail_unavailable,
@@ -152,18 +159,21 @@ private fun JokeDetailContent(
                     val pulseAlpha = skeletonPulseAlpha()
                     Column(
                         modifier = Modifier
-                            .padding(20.dp)
+                            .padding(AppSpacing.cardPadding)
                             .alpha(pulseAlpha),
                     ) {
                         SkeletonLine(widthFraction = 0.9f)
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(
+                            modifier = Modifier
+                                .height(AppSpacing.contentGapMedium),
+                        )
                         SkeletonLine(widthFraction = 0.55f)
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(AppSpacing.pageBottom))
     }
 }
 

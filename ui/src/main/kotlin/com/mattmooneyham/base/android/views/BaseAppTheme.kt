@@ -9,11 +9,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import com.mattmooneyham.base.android.constants.BrandColors
+import com.mattmooneyham.base.android.designSystem.AppTypography
 
 /**
- * App theme built from the shared [BrandColors] semantic tokens
- * (PM Color Reference Guide), so every screen renders the same brand
- * palette from one source of truth.
+ * App theme built from the design system's tokens: the color schemes
+ * below map the shared [BrandColors] semantic palette (PM Color
+ * Reference Guide) onto Material roles, and [AppTypography] pins the
+ * type scale, so every screen renders brand and type from one source
+ * of truth (spacing, shapes, and fixed dimensions live beside them
+ * in the designSystem package).
  */
 @Composable
 fun BaseAppTheme(content: @Composable () -> Unit) {
@@ -50,6 +54,7 @@ fun BaseAppTheme(content: @Composable () -> Unit) {
     }
     MaterialTheme(
         colorScheme = colorScheme,
+        typography = AppTypography,
         content = content,
     )
 }

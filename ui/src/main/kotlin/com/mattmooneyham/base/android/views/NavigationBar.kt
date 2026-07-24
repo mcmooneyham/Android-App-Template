@@ -49,10 +49,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.mattmooneyham.base.android.ui.R
 import com.mattmooneyham.base.android.animations.AppAnimations
+import com.mattmooneyham.base.android.designSystem.AppDimens
+import com.mattmooneyham.base.android.designSystem.AppSpacing
 import com.mattmooneyham.base.android.navigation.AppRouter
 import com.mattmooneyham.base.android.navigation.AppTab
 import com.mattmooneyham.base.android.navigation.HomeDestination
@@ -66,14 +67,8 @@ data class NavigationPage(
     val icon: ImageVector,
 )
 
-// iOS-style tab bar metrics: a 56x30 selection pill, an 18dp icon, an
-// 11sp medium label, and 8dp top / 4dp bottom padding above the system
-// inset.
-private val TabPillWidth = 56.dp
-private val TabPillHeight = 30.dp
-private val TabIconSize = 18.dp
-private val TabLabelSize = 11.sp
-private val TabLabelSpacing = 4.dp
+// The iOS-style tab bar metrics (pill, icon, label spacing) live in
+// AppDimens.TabBar; the label rides the labelSmall role's 11sp size.
 
 // iOS UIColor.separator equivalents for the hairline (the theme's
 // outlineVariant is nearly invisible against the light bar).
@@ -247,7 +242,7 @@ private fun BottomTabBar(
             .navigationBarsPadding(),
     ) {
         HorizontalDivider(
-            thickness = 0.5.dp,
+            thickness = AppDimens.hairline,
             color =
                 if (isSystemInDarkTheme()) TabBarDividerDark
                 else TabBarDividerLight,
@@ -255,12 +250,12 @@ private fun BottomTabBar(
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp, bottom = 4.dp),
+                .padding(top = AppSpacing.sm, bottom = AppSpacing.xs),
         ) {
             val itemWidth = maxWidth / tabs.size
             val pillOffset by animateDpAsState(
                 targetValue = itemWidth * selectedTabIndex +
-                    (itemWidth - TabPillWidth) / 2,
+                    (itemWidth - AppDimens.TabBar.pillWidth) / 2,
                 animationSpec = AppAnimations.tabOffsetSpec,
                 label = "tabPillOffset",
             )
@@ -269,7 +264,10 @@ private fun BottomTabBar(
             Box(
                 modifier = Modifier
                     .offset(x = pillOffset)
-                    .size(width = TabPillWidth, height = TabPillHeight)
+                    .size(
+                        width = AppDimens.TabBar.pillWidth,
+                        height = AppDimens.TabBar.pillHeight,
+                    )
                     .background(
                         color = Color(BrandColors.BRAND).copy(alpha = 0.14f),
                         shape = CircleShape,
@@ -324,20 +322,20 @@ private fun TabBarItem(
     ) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.height(TabPillHeight),
+            modifier = Modifier.height(AppDimens.TabBar.pillHeight),
         ) {
             Icon(
                 imageVector = tab.icon,
                 contentDescription = tabLabel,
                 tint = itemTint,
-                modifier = Modifier.size(TabIconSize),
+                modifier = Modifier.size(AppDimens.TabBar.iconSize),
             )
         }
-        Spacer(modifier = Modifier.height(TabLabelSpacing))
+        Spacer(modifier = Modifier.height(AppDimens.TabBar.labelSpacing))
         Text(
             text = tabLabel,
             color = itemTint,
-            fontSize = TabLabelSize,
+            fontSize = MaterialTheme.typography.labelSmall.fontSize,
             fontWeight = FontWeight.Medium,
         )
     }

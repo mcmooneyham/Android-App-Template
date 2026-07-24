@@ -283,6 +283,11 @@ point at which each becomes worth doing.
   reviewer. A flag missing from the registry, a constructor doing
   network IO, or a second publisher on an event key all fail the
   test suite.
+- **Design tokens**: spacing, type scale, shapes, and component
+  dimensions live in `:ui`'s `designSystem` package (colors in
+  `BrandColors`, mapped to the Material theme). Screens consume
+  tokens, so a rhythm, radius, or font change is one edit, and a
+  brand font is a one-line swap.
 
 ## Stack
 

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +26,8 @@ import com.mattmooneyham.base.android.ui.R
 import com.mattmooneyham.base.android.views.BaseAppTheme
 import com.mattmooneyham.base.android.animations.AppAnimations
 import com.mattmooneyham.base.android.constants.BrandColors
+import com.mattmooneyham.base.android.designSystem.AppShapes
+import com.mattmooneyham.base.android.designSystem.AppSpacing
 
 /**
  * Gradient hero banner for the top of a page: an eyebrow label, a large
@@ -57,11 +58,12 @@ fun HeroCard(
                         Color(BrandColors.BRAND_HOVER),
                     ),
                 ),
-                shape = RoundedCornerShape(28.dp),
+                shape = AppShapes.heroCard,
             ),
     ) {
         Column(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement =
+                Arrangement.spacedBy(AppSpacing.contentGapMedium),
             modifier = Modifier.padding(24.dp),
         ) {
             Text(
@@ -82,7 +84,10 @@ fun HeroCard(
                         color = Color(BrandColors.WHITE).copy(alpha = 0.16f),
                         shape = CircleShape,
                     )
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .padding(
+                        horizontal = AppSpacing.md,
+                        vertical = AppSpacing.contentGapSmall,
+                    ),
             ) {
                 Box(
                     modifier = Modifier
@@ -99,7 +104,7 @@ fun HeroCard(
                     ),
                     style = MaterialTheme.typography.labelLarge,
                     color = Color(BrandColors.WHITE),
-                    modifier = Modifier.padding(start = 8.dp),
+                    modifier = Modifier.padding(start = AppSpacing.sm),
                 )
             }
         }

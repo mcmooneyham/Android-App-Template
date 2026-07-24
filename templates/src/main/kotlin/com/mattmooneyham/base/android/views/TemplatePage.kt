@@ -17,8 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import com.mattmooneyham.base.android.templates.R
+import com.mattmooneyham.base.android.designSystem.AppSpacing
 import com.mattmooneyham.base.android.managers.templateManager.TemplateStateChanged
 import com.mattmooneyham.base.android.viewModels.TemplateViewModel
 import com.mattmooneyham.base.android.views.components.SectionHeader
@@ -67,9 +67,11 @@ fun TemplatePage(
  * the preview below (and any screenshot test) renders every state
  * without a component, a bus, or Hilt. Build screens from the shared
  * components (SettingsGroupCard, SettingsRow, SectionHeader, cards)
- * and keep ALL motion in animations/AppAnimations.kt. User-facing
- * copy lives in res/values/strings.xml (stringResource) so the page
- * localizes; only preview sample data stays literal.
+ * and keep ALL motion in animations/AppAnimations.kt. Spacing, shape,
+ * and size values come from designSystem (AppSpacing, AppShapes,
+ * AppDimens); never hardcode dp literals. User-facing copy lives in
+ * res/values/strings.xml (stringResource) so the page localizes; only
+ * preview sample data stays literal.
  *
  * (internal rather than private ONLY so this module's exemplar flow
  * test can drive it; real pages keep their content private, and real
@@ -84,17 +86,20 @@ internal fun TemplatePageContent(
     onOpenDetail: (() -> Unit)?,
 ) {
     Column(
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.sectionGap),
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = AppSpacing.screenEdge),
     ) {
         Text(
             text = stringResource(R.string.template_title),
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+            modifier = Modifier.padding(
+                top = AppSpacing.md,
+                bottom = AppSpacing.xs,
+            ),
         )
 
         SectionHeader(

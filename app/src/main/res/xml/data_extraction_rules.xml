@@ -1,13 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Backup policy (minSdk 32, so this file alone governs; the legacy
-     fullBackupContent attribute would only matter below API 31).
-     Preferences (the welcome flag) back up and transfer; the log
-     files do not: they are device-specific diagnostics, potentially
-     large, and worthless on another device.
-
-     Kept in sync BY HAND with AppNames.LOG_FILE_NAME (:core's
-     constants package): XML cannot read Kotlin constants, so a
-     rename there updates these three paths too. -->
+<!-- Preferences back up and transfer; the device-specific log files
+     do not. Paths mirror AppNames.LOG_FILE_NAME by hand. -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="file" path="base_app.log" />

@@ -20,10 +20,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import com.mattmooneyham.base.android.ui.R
 import com.mattmooneyham.base.android.viewModels.MainViewModel
 import com.mattmooneyham.base.android.animations.AppAnimations
+import com.mattmooneyham.base.android.designSystem.AppSpacing
 import com.mattmooneyham.base.android.views.components.HeroCard
 import com.mattmooneyham.base.android.views.components.JokeCard
 import com.mattmooneyham.base.android.views.components.SettingsGroupCard
@@ -78,8 +78,6 @@ fun HomePage(
             isJokeRefreshing = jokeState?.status == JokeStatus.REFRESHING,
             // Copy is chosen by the typed failure kind, not by parsing
             // exception text; the technical detail stays in the logs.
-            // (let is inline, so stringResource stays in composable
-            // context here.)
             jokeErrorMessage = jokeState?.failure?.let { failure ->
                 when (failure.kind) {
                     FailureKind.NETWORK ->
@@ -116,17 +114,20 @@ private fun HomePageContent(
     onOpenJokeDetail: (() -> Unit)?,
 ) {
     Column(
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.sectionGap),
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = AppSpacing.screenEdge),
     ) {
         Text(
             text = stringResource(R.string.home_title),
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+            modifier = Modifier.padding(
+                top = AppSpacing.md,
+                bottom = AppSpacing.xs,
+            ),
         )
 
         HeroCard(

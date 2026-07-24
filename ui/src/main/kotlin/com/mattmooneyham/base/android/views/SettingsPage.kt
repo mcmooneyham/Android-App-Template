@@ -36,8 +36,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import com.mattmooneyham.base.android.ui.R
+import com.mattmooneyham.base.android.designSystem.AppDimens
+import com.mattmooneyham.base.android.designSystem.AppSpacing
 import com.mattmooneyham.base.android.managers.featureFlagManager.AppFlags
 import com.mattmooneyham.base.android.managers.featureFlagManager.BooleanFlag
 import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagsChanged
@@ -217,13 +218,16 @@ private fun SettingsContent(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = AppSpacing.screenEdge),
     ) {
         Text(
             text = stringResource(R.string.settings_title),
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+            modifier = Modifier.padding(
+                top = AppSpacing.md,
+                bottom = AppSpacing.xs,
+            ),
         )
 
         SectionHeader(
@@ -256,7 +260,7 @@ private fun SettingsContent(
             )
             HorizontalDivider(
                 color = MaterialTheme.colorScheme.outlineVariant,
-                modifier = Modifier.padding(start = 68.dp),
+                modifier = Modifier.padding(start = AppDimens.dividerInset),
             )
             SettingsRow(
                 icon = Icons.Filled.Delete,
@@ -280,7 +284,7 @@ private fun SettingsContent(
             )
             HorizontalDivider(
                 color = MaterialTheme.colorScheme.outlineVariant,
-                modifier = Modifier.padding(start = 68.dp),
+                modifier = Modifier.padding(start = AppDimens.dividerInset),
             )
             SettingsRow(
                 icon = Icons.Filled.Build,
@@ -307,7 +311,7 @@ private fun SettingsContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(AppSpacing.pageBottom))
     }
 }
 

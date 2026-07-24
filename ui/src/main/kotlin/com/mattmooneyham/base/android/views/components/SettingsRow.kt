@@ -27,6 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.mattmooneyham.base.android.animations.pressScale
+import com.mattmooneyham.base.android.designSystem.AppDimens
+import com.mattmooneyham.base.android.designSystem.AppSpacing
 import com.mattmooneyham.base.android.views.BaseAppTheme
 import com.mattmooneyham.base.android.constants.BrandColors
 
@@ -68,7 +70,10 @@ fun SettingsRow(
                     Modifier
                 },
             )
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(
+                horizontal = AppSpacing.lg,
+                vertical = AppSpacing.contentGapLarge,
+            ),
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -83,14 +88,14 @@ fun SettingsRow(
                 imageVector = icon,
                 contentDescription = null,
                 tint = accentColor,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(AppDimens.iconLarge),
             )
         }
 
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(horizontal = 14.dp),
+                .padding(horizontal = AppSpacing.contentGapLarge),
         ) {
             Text(
                 text = title,

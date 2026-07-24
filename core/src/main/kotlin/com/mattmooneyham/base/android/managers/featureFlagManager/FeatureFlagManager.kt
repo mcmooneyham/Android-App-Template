@@ -210,10 +210,8 @@ class FeatureFlagManager(
     }
 
     companion object {
-        // The file sits beside the app's main preferences store but
-        // stays its own store (DataStore allows one instance per file
-        // per process); the name lives in AppNames for single-point
-        // rename.
+        // Its own store beside the main preferences file: DataStore
+        // allows one instance per file per process.
         const val FLAG_OVERRIDES_FILE_NAME =
             AppNames.FLAG_OVERRIDES_STORE_FILE_NAME
     }
