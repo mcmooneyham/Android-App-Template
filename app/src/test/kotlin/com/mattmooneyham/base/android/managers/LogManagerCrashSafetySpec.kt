@@ -125,7 +125,13 @@ class LogManagerCrashSafetySpec {
             app.filesDirectory,
             LogManager.DEFAULT_LOG_FILE_NAME,
         )
-        val rotatedLogFile = File(app.filesDirectory, "base-app.1.log")
+        // Derive the history name from the constant so a rename of
+        // the live log file can never silently break this assertion.
+        val rotatedLogFile = File(
+            app.filesDirectory,
+            LogManager.DEFAULT_LOG_FILE_NAME
+                .replace(".log", ".1.log"),
+        )
         assertTrue(liveLogFile.exists())
         assertTrue(rotatedLogFile.exists())
         assertTrue(

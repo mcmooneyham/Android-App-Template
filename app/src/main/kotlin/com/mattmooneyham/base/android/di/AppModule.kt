@@ -7,7 +7,7 @@ import com.mattmooneyham.base.android.constants.BuildInfo
 import com.mattmooneyham.base.android.managers.dataStoreManager.DataStoreManager
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagManager
-import com.mattmooneyham.base.android.managers.JokeManager
+import com.mattmooneyham.base.android.managers.jokeManager.JokeManager
 import com.mattmooneyham.base.android.managers.logManager.LogManager
 import com.mattmooneyham.base.android.managers.connectivityManager.ConnectivityManager
 import dagger.Module
@@ -24,6 +24,23 @@ import dagger.hilt.components.SingletonComponent
  * place; it is not a component member). No scoping is
  * needed; the component already holds single instances, and Hilt never
  * constructs a manager itself.
+ *
+ * WHY HILT AT ALL: the app's own wiring is manual, and a hand-rolled
+ * ViewModelProvider.Factory could replace this file. Hilt is kept for
+ * the Android edges a growing app hits early, at the price of one
+ * annotation per site: `by viewModels()` ergonomics today, and
+ * SavedStateHandle, assisted injection, WorkManager/Service injection,
+ * and @HiltAndroidTest tooling the day they are needed, with no
+ * rewiring. Delete the hilt/ksp plugins plus this file and swap in a
+ * manual factory if that trade reads the other way for your product.
+ *
+ * INJECTION IS AVAILABLE FROM Application.onCreate ONWARD, no
+ * earlier: [AppComponentHost.appComponent] is assigned there.
+ * ContentProvider-era consumers (androidx.startup initializers,
+ * on-demand WorkManager configuration) initialize BEFORE onCreate and
+ * would crash; none exist in the template, and adding one means
+ * moving component construction into BaseApplication's constructor
+ * or init block first.
  */
 @Module
 @InstallIn(SingletonComponent::class)

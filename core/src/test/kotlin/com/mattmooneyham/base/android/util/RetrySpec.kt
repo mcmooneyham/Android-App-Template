@@ -266,6 +266,42 @@ class RetrySpec {
         }
 
     @Test
+    fun `jitter shortens waits within bounds, never lengthens them`() =
+        runBlocking<Unit> {
+            val reportedDelays = mutableListOf<Duration>()
+            try {
+                retry<Unit>(
+                    policy = quickPolicy(maxAttempts = 4)
+                        .copy(jitterFactor = 1.0),
+                    onRetry = { _, _, nextDelay ->
+                        reportedDelays += nextDelay
+                    },
+                ) { throw IOException("always fails") }
+                fail("retry must rethrow after max attempts")
+            } catch (expected: IOException) {
+                // Expected.
+            }
+
+            // Full jitter: each wait lands in [0, computed]. The
+            // computed sequence itself (1, 2, 4 ms) keeps growing
+            // deterministically underneath, so jitter can only spread
+            // retriers apart, never slow the backoff climb.
+            assertEquals(3, reportedDelays.size)
+            val computedCeilings = listOf(
+                1.milliseconds,
+                2.milliseconds,
+                4.milliseconds,
+            )
+            reportedDelays.forEachIndexed { index, actualDelay ->
+                assertTrue(
+                    "delay $actualDelay above ${computedCeilings[index]}",
+                    actualDelay <= computedCeilings[index],
+                )
+                assertTrue(actualDelay >= Duration.ZERO)
+            }
+        }
+
+    @Test
     fun `nonsensical policies are rejected at construction`() {
         val invalidConstructions = listOf<() -> RetryPolicy>(
             { RetryPolicy(maxAttempts = 0) },
@@ -277,6 +313,7 @@ class RetrySpec {
                 )
             },
             { RetryPolicy(backoffMultiplier = 0.5) },
+            { RetryPolicy(jitterFactor = 1.5) },
         )
         invalidConstructions.forEach { construct ->
             try {

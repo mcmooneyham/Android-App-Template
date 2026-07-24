@@ -1,6 +1,6 @@
 package com.mattmooneyham.base.android.managers.featureFlagManager
 
-import com.mattmooneyham.base.android.managers.JokeAutoRetryOnReconnectFlag
+import com.mattmooneyham.base.android.managers.jokeManager.JokeAutoRetryOnReconnectFlag
 
 /**
  * The registry of every declared [BooleanFlag]. Flags stay DECLARED

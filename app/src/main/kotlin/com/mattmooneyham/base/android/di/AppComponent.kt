@@ -7,7 +7,7 @@ import com.mattmooneyham.base.android.managers.ConfinedManager
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.featureFlagManager.AppFlags
 import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagManager
-import com.mattmooneyham.base.android.managers.JokeManager
+import com.mattmooneyham.base.android.managers.jokeManager.JokeManager
 import com.mattmooneyham.base.android.managers.logManager.LogFileSettings
 import com.mattmooneyham.base.android.managers.logManager.LogManager
 import com.mattmooneyham.base.android.managers.logManager.LogSinks

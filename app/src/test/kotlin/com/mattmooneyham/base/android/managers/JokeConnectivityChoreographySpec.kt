@@ -1,5 +1,8 @@
 package com.mattmooneyham.base.android.managers
 
+import com.mattmooneyham.base.android.managers.jokeManager.JokeAutoRetryOnReconnectFlag
+import com.mattmooneyham.base.android.managers.jokeManager.JokeStateChanged
+import com.mattmooneyham.base.android.managers.jokeManager.JokeStatus
 import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagsChanged
 import com.mattmooneyham.base.android.managers.featureFlagManager.FlagSource
 import com.mattmooneyham.base.android.managers.featureFlagManager.ResolvedFlag

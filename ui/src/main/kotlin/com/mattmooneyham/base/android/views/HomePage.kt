@@ -17,9 +17,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.mattmooneyham.base.android.ui.R
 import com.mattmooneyham.base.android.viewModels.MainViewModel
 import com.mattmooneyham.base.android.animations.AppAnimations
 import com.mattmooneyham.base.android.views.components.HeroCard
@@ -28,14 +30,15 @@ import com.mattmooneyham.base.android.views.components.SettingsGroupCard
 import com.mattmooneyham.base.android.views.components.SettingsRow
 import com.mattmooneyham.base.android.api.FailureKind
 import com.mattmooneyham.base.android.managers.dataStoreManager.HasSeenWelcomeChanged
-import com.mattmooneyham.base.android.managers.JokeStateChanged
-import com.mattmooneyham.base.android.managers.JokeStatus
+import com.mattmooneyham.base.android.managers.jokeManager.JokeStateChanged
+import com.mattmooneyham.base.android.managers.jokeManager.JokeStatus
 import com.mattmooneyham.base.android.managers.connectivityManager.NetworkConnectivityChanged
 
 /**
  * Home tab. Simple event-backed values are observed straight from the
  * event bus via the Compose-native [eventState] helpers; the
- * viewmodel supplies only the greeting and write actions. Rendering
+ * viewmodel supplies only the greeting subject and write actions (the
+ * localized greeting itself is built here from resources). Rendering
  * lives in the previewable [HomePageContent]. Navigation stays a
  * semantic lambda ([onOpenJokeDetail]): the shell wires it to the
  * router, so pages never see navigation machinery.
@@ -64,7 +67,10 @@ fun HomePage(
         enter = AppAnimations.contentEnterTransition,
     ) {
         HomePageContent(
-            greeting = mainViewModel.greeting,
+            greeting = stringResource(
+                R.string.hello_headline,
+                mainViewModel.greetingSubject,
+            ),
             isOnline = isOnline,
             hasSeenWelcome = hasSeenWelcome,
             jokeSetup = jokeState?.joke?.setup,
@@ -72,16 +78,20 @@ fun HomePage(
             isJokeRefreshing = jokeState?.status == JokeStatus.REFRESHING,
             // Copy is chosen by the typed failure kind, not by parsing
             // exception text; the technical detail stays in the logs.
+            // (let is inline, so stringResource stays in composable
+            // context here.)
             jokeErrorMessage = jokeState?.failure?.let { failure ->
                 when (failure.kind) {
                     FailureKind.NETWORK ->
-                        "Couldn't load a joke. Check your connection."
+                        stringResource(R.string.joke_error_network)
                     FailureKind.HTTP ->
-                        "The joke service had a problem. Try again."
+                        stringResource(R.string.joke_error_http)
                     FailureKind.DECODE ->
-                        "The joke service sent an unexpected response."
+                        stringResource(R.string.joke_error_decode)
+                    FailureKind.TIMEOUT ->
+                        stringResource(R.string.joke_error_timeout)
                     FailureKind.UNKNOWN ->
-                        "Couldn't load a joke. Try again."
+                        stringResource(R.string.joke_error_unknown)
                 }
             },
             onRefreshJoke = mainViewModel::refreshJoke,
@@ -113,23 +123,23 @@ private fun HomePageContent(
             .padding(horizontal = 20.dp),
     ) {
         Text(
-            text = "Home",
+            text = stringResource(R.string.home_title),
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
         )
 
         HeroCard(
-            label = "App core",
+            label = stringResource(R.string.home_hero_label),
             headline = greeting,
             isOnline = isOnline,
         )
 
         AnimatedContent(
             targetState = when (hasSeenWelcome) {
-                null -> "Loading preferences..."
-                true -> "Welcome back!"
-                false -> "First launch"
+                null -> stringResource(R.string.session_loading)
+                true -> stringResource(R.string.session_welcome_back)
+                false -> stringResource(R.string.session_first_launch)
             },
             transitionSpec = AppAnimations.contentSwapTransform(),
             label = "sessionStatus",
@@ -137,7 +147,7 @@ private fun HomePageContent(
             SettingsGroupCard {
                 SettingsRow(
                     icon = Icons.Filled.Person,
-                    title = "Session",
+                    title = stringResource(R.string.session_row_title),
                     supportingText = sessionStatusText,
                 )
             }

@@ -9,9 +9,12 @@
     <!-- Required for ApiClient's Ktor requests. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Backups stay on, with the log files excluded; the policy and
+         its rationale live in res/xml/data_extraction_rules.xml. -->
     <application
         android:name=".BaseApplication"
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"

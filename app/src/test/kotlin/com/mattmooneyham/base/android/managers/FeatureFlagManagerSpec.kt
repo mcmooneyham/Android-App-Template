@@ -3,6 +3,7 @@ package com.mattmooneyham.base.android.managers
 import com.mattmooneyham.base.android.managers.dataStoreManager.createDataStoreScope
 import com.mattmooneyham.base.android.managers.dataStoreManager.createPreferencesDataStore
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
+import com.mattmooneyham.base.android.managers.jokeManager.JokeAutoRetryOnReconnectFlag
 import com.mattmooneyham.base.android.managers.featureFlagManager.AppFlags
 import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagManager
 import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagsChanged

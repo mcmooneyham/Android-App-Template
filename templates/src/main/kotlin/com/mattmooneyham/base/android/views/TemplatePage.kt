@@ -14,9 +14,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.mattmooneyham.base.android.templates.R
 import com.mattmooneyham.base.android.managers.templateManager.TemplateStateChanged
 import com.mattmooneyham.base.android.viewModels.TemplateViewModel
 import com.mattmooneyham.base.android.views.components.SectionHeader
@@ -65,7 +67,9 @@ fun TemplatePage(
  * the preview below (and any screenshot test) renders every state
  * without a component, a bus, or Hilt. Build screens from the shared
  * components (SettingsGroupCard, SettingsRow, SectionHeader, cards)
- * and keep ALL motion in animations/AppAnimations.kt.
+ * and keep ALL motion in animations/AppAnimations.kt. User-facing
+ * copy lives in res/values/strings.xml (stringResource) so the page
+ * localizes; only preview sample data stays literal.
  *
  * (internal rather than private ONLY so this module's exemplar flow
  * test can drive it; real pages keep their content private, and real
@@ -87,25 +91,39 @@ internal fun TemplatePageContent(
             .padding(horizontal = 20.dp),
     ) {
         Text(
-            text = "Template",
+            text = stringResource(R.string.template_title),
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
         )
 
-        SectionHeader(title = "Readings")
+        SectionHeader(
+            title = stringResource(R.string.template_section_readings),
+        )
         SettingsGroupCard {
             SettingsRow(
                 icon = Icons.Filled.Info,
-                title = "Latest reading",
-                supportingText = if (isEnriched) "Enriched" else null,
-                trailingValue = latestReading?.toString() ?: "none yet",
+                title = stringResource(
+                    R.string.template_latest_reading_title,
+                ),
+                supportingText = if (isEnriched) {
+                    stringResource(R.string.template_reading_enriched)
+                } else {
+                    null
+                },
+                trailingValue = latestReading?.toString()
+                    ?: stringResource(R.string.template_reading_none),
                 onClick = onOpenDetail,
             )
             SettingsRow(
                 icon = Icons.Filled.Delete,
-                title = "Clear history",
-                supportingText = "$readingCount reading(s) recorded",
+                title = stringResource(
+                    R.string.template_clear_history_title,
+                ),
+                supportingText = stringResource(
+                    R.string.template_reading_count,
+                    readingCount,
+                ),
                 isDestructive = true,
                 onClick = onClearHistory,
             )

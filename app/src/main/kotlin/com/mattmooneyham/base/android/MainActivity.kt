@@ -41,16 +41,18 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        // Demonstrates the DataStore-backed preference round trip:
-        // launch marks the welcome seen, so Home settles on "Welcome
-        // back!" every start; "First launch" shows after clearing the
-        // flag from Settings, until the next launch writes it again.
-        mainViewModel.markWelcomeSeen()
-
-        // Cold-start links ride the launching intent. On recreation
-        // rememberSaveable restores the stacks and the intent was
+        // Cold-start-only work: onCreate also re-runs on every
+        // configuration change (a dark-mode toggle, resizing), and
+        // neither of these may repeat then. The welcome write is the
+        // DataStore round-trip demo: a fresh launch marks the welcome
+        // seen, so Home settles on "Welcome back!"; after clearing
+        // the flag from Settings, "First launch" shows until the next
+        // LAUNCH (not the next recreation) writes it again. Deep
+        // links ride the launching intent, and on recreation
+        // rememberSaveable restores the stacks with the intent
         // already consumed, so it must not replace them again.
         if (savedInstanceState == null) {
+            mainViewModel.markWelcomeSeen()
             pendingDeepLinkUrl.value = intent?.dataString
         }
 

@@ -33,9 +33,11 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.mattmooneyham.base.android.ui.R
 import com.mattmooneyham.base.android.animations.AppAnimations
 import com.mattmooneyham.base.android.animations.skeletonPulseAlpha
 import com.mattmooneyham.base.android.views.BaseAppTheme
@@ -102,13 +104,13 @@ fun JokeCard(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Random joke",
+                        text = stringResource(R.string.joke_card_title),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = "Fresh from the Joke API",
+                        text = stringResource(R.string.joke_card_subtitle),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -134,7 +136,10 @@ fun JokeCard(
                         IconButton(onClick = onRefresh) {
                             Icon(
                                 imageVector = Icons.Filled.Refresh,
-                                contentDescription = "Refresh joke",
+                                contentDescription = stringResource(
+                                    R.string
+                                        .joke_card_refresh_content_description,
+                                ),
                                 tint = RefreshTint,
                                 modifier = Modifier.size(20.dp),
                             )
@@ -183,8 +188,13 @@ fun JokeCard(
                         }
                     }
                 }
-            } else {
-                // Skeleton placeholder while the first joke loads.
+            } else if (errorMessage == null || isLoading) {
+                // Skeleton placeholder while a joke is genuinely on
+                // its way. A terminal failure with nothing cached
+                // shows only the error row below: a pulsing skeleton
+                // under a dead fetch would promise progress that is
+                // not happening (and keep an infinite animation alive
+                // in a settled screen).
                 val pulseAlpha = skeletonPulseAlpha()
                 Column(modifier = Modifier.alpha(pulseAlpha)) {
                     SkeletonLine(widthFraction = 0.9f)
@@ -214,8 +224,9 @@ fun JokeCard(
     }
 }
 
+/** One pulsing placeholder line; shared by the loading states. */
 @Composable
-private fun SkeletonLine(widthFraction: Float) {
+internal fun SkeletonLine(widthFraction: Float) {
     Box(
         modifier = Modifier
             .fillMaxWidth(widthFraction)

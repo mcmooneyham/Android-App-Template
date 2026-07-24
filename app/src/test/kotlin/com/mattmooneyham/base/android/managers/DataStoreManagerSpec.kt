@@ -82,6 +82,31 @@ class DataStoreManagerSpec {
             assertEquals(false, dataStoreManager.hasSeenWelcome.first())
         }
 
+    @Test
+    fun `the welcome value survives a session reset`() =
+        runBlocking<Unit> {
+            val app = startApp()
+            val dataStoreManager = app.component.dataStoreManager
+            val recorder = app.newRecorder().record(HasSeenWelcomeChanged)
+
+            dataStoreManager.setHasSeenWelcome(true)
+            recorder.expectStateMatching(HasSeenWelcomeChanged) { it }
+
+            // Logout recipe: SESSION replay caches are cleared. The
+            // welcome flag is a DEVICE fact behind a change-gated
+            // bridge that never re-publishes on reset, so the key is
+            // APP lifetime and the cached value must survive; a
+            // SESSION lifetime here would leave the key dark until
+            // the next value-CHANGING write.
+            app.component.eventManager.resetSessionReplayCaches()
+
+            assertEquals(
+                true,
+                app.component.eventManager
+                    .currentValue(HasSeenWelcomeChanged),
+            )
+        }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `the bus bridge survives a read failure and resubscribes`() =

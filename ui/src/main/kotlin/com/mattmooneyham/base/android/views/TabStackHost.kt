@@ -33,7 +33,10 @@ fun <Destination : Any> TabStackHost(
     // resurrect on the next push. removeState on a key that is still
     // composed (the exit animation) marks it do-not-save, so calling
     // it here, inside SideEffect, is exactly right. Keys are the
-    // destinations' stable data-class toString; identical
+    // destinations' toString, which is stable ONLY for data
+    // classes/data objects (a plain object's identity-hash toString
+    // changes across process death and would silently skip restore);
+    // a guard test enforces the data requirement. Identical
     // simultaneous pushes would share state, fine until a flow does
     // that (the scaling guide's Navigation 3 row covers the fix).
     val liveEntryKeys = backStack.map { destination ->

@@ -4,9 +4,8 @@ import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mattmooneyham.base.android.managers.dataStoreManager.DataStoreManager
-import com.mattmooneyham.base.android.managers.JokeManager
+import com.mattmooneyham.base.android.managers.jokeManager.JokeManager
 import com.mattmooneyham.base.android.managers.logManager.LogManager
-import com.mattmooneyham.base.android.util.sayHello
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -24,9 +23,9 @@ class MainViewModel @Inject constructor(
     private val jokeManager: JokeManager,
 ) : ViewModel() {
 
-    /** Sample hero-card headline, e.g. "Hello, Android 36!". */
-    val greeting: String =
-        sayHello("Android ${Build.VERSION.SDK_INT}")
+    /** Raw subject for the hero headline, e.g. "Android 36"; the view
+     * wraps it in the localized hello_headline resource. */
+    val greetingSubject: String = "Android ${Build.VERSION.SDK_INT}"
 
     init {
         logManager.info("MainViewModel created")
@@ -41,6 +40,12 @@ class MainViewModel @Inject constructor(
     /** Asks the app core for a fresh joke; the result arrives as events. */
     fun refreshJoke() {
         jokeManager.refreshJoke()
+    }
+
+    /** Ensures the joke with [jokeId] is loaded for a detail screen;
+     * the keyed result arrives as JokeDetailChanged events. */
+    fun loadJokeDetail(jokeId: Int) {
+        jokeManager.loadJokeDetail(jokeId)
     }
 
 }

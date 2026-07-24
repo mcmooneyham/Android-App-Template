@@ -3,6 +3,8 @@ package com.mattmooneyham.base.android.flows
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.platform.app.InstrumentationRegistry
+import com.mattmooneyham.base.android.templates.R
 import com.mattmooneyham.base.android.views.BaseAppTheme
 import com.mattmooneyham.base.android.views.TemplatePageContent
 import org.junit.Assert.assertEquals
@@ -32,6 +34,8 @@ import org.junit.Test
  * STEP 1: MATCH SEMANTICS, NOT INTERNALS. Find nodes by user-visible
  * text, contentDescription, or a stable testTag (the JokeCard
  * pattern) so tests survive refactors; never by tree position.
+ * Localized copy resolves through the module's own resources
+ * ([templateString]), never through hardcoded English literals.
  *
  * STEP 2: PREFER waitForText/waitUntil (FlowTestHelpers) over sleeps
  * in real flow tests: the app settles asynchronously.
@@ -40,6 +44,12 @@ class TemplateFlowTest {
 
     @get:Rule
     val composeRule = createComposeRule()
+
+    /** Resolves a string through the instrumented resources, so the
+     * matchers follow strings.xml instead of hardcoding English. */
+    private fun templateString(resId: Int): String =
+        InstrumentationRegistry.getInstrumentation()
+            .targetContext.getString(resId)
 
     @Test
     fun clearHistoryRowInvokesItsAction() {
@@ -56,10 +66,18 @@ class TemplateFlowTest {
             }
         }
 
-        composeRule.onNodeWithText("Latest reading").assertExists()
+        composeRule
+            .onNodeWithText(
+                templateString(R.string.template_latest_reading_title),
+            )
+            .assertExists()
         composeRule.onNodeWithText("42").assertExists()
 
-        composeRule.onNodeWithText("Clear history").performClick()
+        composeRule
+            .onNodeWithText(
+                templateString(R.string.template_clear_history_title),
+            )
+            .performClick()
 
         assertEquals(1, clearInvocationCount)
     }

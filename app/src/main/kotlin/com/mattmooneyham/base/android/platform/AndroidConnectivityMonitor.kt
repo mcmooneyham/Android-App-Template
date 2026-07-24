@@ -60,6 +60,15 @@ class AndroidConnectivityMonitor(
 
         systemConnectivityManager = connectivityManager
         activeNetworkCallback = callback
+        // Port contract: the FIRST report is the device's actual
+        // current state, queried synchronously, so consumers start
+        // from truth instead of a fabricated "offline" that the first
+        // callback would immediately contradict.
+        val currentCapabilities = connectivityManager
+            .getNetworkCapabilities(connectivityManager.activeNetwork)
+        onConnectivityChanged(
+            currentCapabilities?.hasValidatedInternet() == true,
+        )
         connectivityManager.registerDefaultNetworkCallback(callback)
     }
 

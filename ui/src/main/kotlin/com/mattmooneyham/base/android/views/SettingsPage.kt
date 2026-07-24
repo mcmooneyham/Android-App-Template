@@ -33,14 +33,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.mattmooneyham.base.android.ui.R
 import com.mattmooneyham.base.android.managers.featureFlagManager.AppFlags
 import com.mattmooneyham.base.android.managers.featureFlagManager.BooleanFlag
 import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagsChanged
 import com.mattmooneyham.base.android.managers.featureFlagManager.FlagSource
-import com.mattmooneyham.base.android.managers.JokeAutoRetryOnReconnectFlag
+import com.mattmooneyham.base.android.managers.jokeManager.JokeAutoRetryOnReconnectFlag
 import com.mattmooneyham.base.android.viewModels.SettingsViewModel
 import com.mattmooneyham.base.android.views.components.FeatureFlagSheetContent
 import com.mattmooneyham.base.android.views.components.FlagRowUiState
@@ -93,7 +95,12 @@ fun SettingsPage(settingsViewModel: SettingsViewModel) {
                     settingsViewModel.writeLogExportSnapshot()
                 val sendIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
-                    putExtra(Intent.EXTRA_SUBJECT, "Base App logs")
+                    // Click callbacks are not composable scope, so the
+                    // share-sheet copy resolves through the context.
+                    putExtra(
+                        Intent.EXTRA_SUBJECT,
+                        context.getString(R.string.logs_export_subject),
+                    )
                     if (exportPath != null) {
                         // The FULL history rides a content URI; text
                         // extras would drop the rotated half and can
@@ -110,12 +117,17 @@ fun SettingsPage(settingsViewModel: SettingsViewModel) {
                     } else {
                         putExtra(
                             Intent.EXTRA_TEXT,
-                            "No logs recorded yet.",
+                            context.getString(R.string.logs_export_none),
                         )
                     }
                 }
                 context.startActivity(
-                    Intent.createChooser(sendIntent, "Export logs"),
+                    Intent.createChooser(
+                        sendIntent,
+                        context.getString(
+                            R.string.logs_export_chooser_title,
+                        ),
+                    ),
                 )
             }
         },
@@ -162,11 +174,16 @@ private fun SettingsContent(
     if (isClearLogsDialogVisible) {
         AlertDialog(
             onDismissRequest = { isClearLogsDialogVisible = false },
-            title = { Text(text = "Clear logs?") },
+            title = {
+                Text(
+                    text = stringResource(
+                        R.string.clear_logs_dialog_title,
+                    ),
+                )
+            },
             text = {
                 Text(
-                    text = "This deletes the app's log file and cannot " +
-                        "be undone.",
+                    text = stringResource(R.string.clear_logs_dialog_body),
                 )
             },
             confirmButton = {
@@ -177,14 +194,20 @@ private fun SettingsContent(
                     },
                 ) {
                     Text(
-                        text = "Clear logs",
+                        text = stringResource(
+                            R.string.clear_logs_dialog_confirm,
+                        ),
                         color = Color(BrandColors.DANGER),
                     )
                 }
             },
             dismissButton = {
                 TextButton(onClick = { isClearLogsDialogVisible = false }) {
-                    Text(text = "Cancel")
+                    Text(
+                        text = stringResource(
+                            R.string.clear_logs_dialog_cancel,
+                        ),
+                    )
                 }
             },
         )
@@ -197,28 +220,38 @@ private fun SettingsContent(
             .padding(horizontal = 20.dp),
     ) {
         Text(
-            text = "Settings",
+            text = stringResource(R.string.settings_title),
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
         )
 
-        SectionHeader(title = "Preferences")
+        SectionHeader(
+            title = stringResource(R.string.settings_section_preferences),
+        )
         SettingsGroupCard {
             SettingsRow(
                 icon = Icons.Filled.Refresh,
-                title = "Clear welcome flag",
-                supportingText = "Home shows \"First launch\" until restart",
+                title = stringResource(
+                    R.string.settings_clear_welcome_title,
+                ),
+                supportingText = stringResource(
+                    R.string.settings_clear_welcome_supporting,
+                ),
                 onClick = onClearWelcomeFlag,
             )
         }
 
-        SectionHeader(title = "Logs")
+        SectionHeader(
+            title = stringResource(R.string.settings_section_logs),
+        )
         SettingsGroupCard {
             SettingsRow(
                 icon = Icons.Filled.Share,
-                title = "Export logs",
-                supportingText = "Share the app's log file contents",
+                title = stringResource(R.string.settings_export_logs_title),
+                supportingText = stringResource(
+                    R.string.settings_export_logs_supporting,
+                ),
                 onClick = onExportLogs,
             )
             HorizontalDivider(
@@ -227,18 +260,22 @@ private fun SettingsContent(
             )
             SettingsRow(
                 icon = Icons.Filled.Delete,
-                title = "Clear logs",
-                supportingText = "Delete the app's log file",
+                title = stringResource(R.string.settings_clear_logs_title),
+                supportingText = stringResource(
+                    R.string.settings_clear_logs_supporting,
+                ),
                 isDestructive = true,
                 onClick = { isClearLogsDialogVisible = true },
             )
         }
 
-        SectionHeader(title = "About")
+        SectionHeader(
+            title = stringResource(R.string.settings_section_about),
+        )
         SettingsGroupCard {
             SettingsRow(
                 icon = Icons.Filled.Info,
-                title = "Version",
+                title = stringResource(R.string.settings_version_title),
                 trailingValue = appVersionName,
             )
             HorizontalDivider(
@@ -247,19 +284,24 @@ private fun SettingsContent(
             )
             SettingsRow(
                 icon = Icons.Filled.Build,
-                title = "Build",
+                title = stringResource(R.string.settings_build_title),
                 trailingValue = buildTimestampSeconds.toString(),
             )
         }
 
         if (debugFlagRows.isNotEmpty()) {
-            SectionHeader(title = "Debug")
+            SectionHeader(
+                title = stringResource(R.string.settings_section_debug),
+            )
             SettingsGroupCard {
                 SettingsRow(
                     icon = Icons.AutoMirrored.Filled.List,
-                    title = "Feature flags",
-                    supportingText =
-                        "View and override the app's feature flags",
+                    title = stringResource(
+                        R.string.settings_feature_flags_title,
+                    ),
+                    supportingText = stringResource(
+                        R.string.settings_feature_flags_supporting,
+                    ),
                     onClick = { isFlagSheetVisible = true },
                 )
             }

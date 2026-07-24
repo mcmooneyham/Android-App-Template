@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.annotation.StringRes
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -20,11 +21,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.mattmooneyham.base.android.ui.R
 import com.mattmooneyham.base.android.constants.BrandColors
-import com.mattmooneyham.base.android.managers.JokeAutoRetryOnReconnectFlag
+import com.mattmooneyham.base.android.managers.jokeManager.JokeAutoRetryOnReconnectFlag
 import com.mattmooneyham.base.android.managers.featureFlagManager.BooleanFlag
 import com.mattmooneyham.base.android.managers.featureFlagManager.FlagSource
 import com.mattmooneyham.base.android.views.BaseAppTheme
@@ -37,11 +40,12 @@ data class FlagRowUiState(
 )
 
 // The three override choices, in display order. null = no override
-// (the provider/default layers decide).
-private val OVERRIDE_CHOICES: List<Pair<String, Boolean?>> = listOf(
-    "Default" to null,
-    "On" to true,
-    "Off" to false,
+// (the provider/default layers decide). Labels are resource IDs,
+// resolved in the composable segment row, so the control localizes.
+private val OVERRIDE_CHOICES: List<Pair<Int, Boolean?>> = listOf(
+    R.string.flag_override_default to null,
+    R.string.flag_override_on to true,
+    R.string.flag_override_off to false,
 )
 
 /**
@@ -67,14 +71,13 @@ fun FeatureFlagSheetContent(
             .padding(horizontal = 20.dp),
     ) {
         Text(
-            text = "Feature flags",
+            text = stringResource(R.string.flag_sheet_title),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
-            text = "Local overrides beat remote and default values and " +
-                "persist across launches. Debug builds only.",
+            text = stringResource(R.string.flag_sheet_explainer),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),
@@ -132,9 +135,11 @@ private fun FeatureFlagRow(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
+                // The flagKey is a technical identifier and stays
+                // raw; only the source description localizes.
                 Text(
                     text = "${flagRow.flag.flagKey} · " +
-                        describeSource(flagRow.source),
+                        stringResource(sourceLabelResId(flagRow.source)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -144,8 +149,8 @@ private fun FeatureFlagRow(
             // and danger colors as overrides are applied.
             StatusChip(
                 isPositive = flagRow.resolvedEnabled,
-                positiveText = "On",
-                negativeText = "Off",
+                positiveText = stringResource(R.string.flag_state_on),
+                negativeText = stringResource(R.string.flag_state_off),
             )
         }
 
@@ -167,7 +172,7 @@ private fun FeatureFlagRow(
         SingleChoiceSegmentedButtonRow(
             modifier = Modifier.fillMaxWidth(),
         ) {
-            OVERRIDE_CHOICES.forEachIndexed { index, (label, value) ->
+            OVERRIDE_CHOICES.forEachIndexed { index, (labelResId, value) ->
                 SegmentedButton(
                     selected = value == selectedOverride,
                     onClick = { onOverrideSelected(flagRow.flag, value) },
@@ -178,7 +183,7 @@ private fun FeatureFlagRow(
                     colors = segmentColors,
                     label = {
                         Text(
-                            text = label,
+                            text = stringResource(labelResId),
                             style = MaterialTheme.typography.labelMedium,
                         )
                     },
@@ -188,10 +193,13 @@ private fun FeatureFlagRow(
     }
 }
 
-private fun describeSource(source: FlagSource): String = when (source) {
-    FlagSource.DEFAULT -> "compiled default"
-    FlagSource.PROVIDER -> "remote value"
-    FlagSource.OVERRIDE -> "local override"
+// Resource ID rather than text: the caller resolves it in composable
+// context, keeping this mapping usable outside composition too.
+@StringRes
+private fun sourceLabelResId(source: FlagSource): Int = when (source) {
+    FlagSource.DEFAULT -> R.string.flag_source_default
+    FlagSource.PROVIDER -> R.string.flag_source_provider
+    FlagSource.OVERRIDE -> R.string.flag_source_override
 }
 
 // Both preview rows reuse the registered demo flag (a preview-only

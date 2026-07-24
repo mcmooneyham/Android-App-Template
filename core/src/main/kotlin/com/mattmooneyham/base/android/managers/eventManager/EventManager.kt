@@ -5,6 +5,7 @@ import java.lang.ref.WeakReference
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -51,7 +52,7 @@ import kotlin.collections.iterator
  *   that throws is logged loudly and KEPT ALIVE; one bad payload must
  *   not silently kill a screen's subscription.
  *
- * Ordering contract (the five rules every consumer may rely on):
+ * Ordering contract (the six rules every consumer may rely on):
  *  1. Delivery order ACROSS different keys is unspecified; never
  *     assume event A on one key lands before event B on another.
  *  2. Per-key delivery is in trigger order.
@@ -62,6 +63,10 @@ import kotlin.collections.iterator
  *  5. Triggers are synchronous and never block; under overflow the
  *     OLDEST buffered event is dropped (latest wins), never the
  *     caller's thread.
+ *  6. A signal subscription is LIVE before [listenTo] returns: a
+ *     signal fired on the caller's next line is delivered. State
+ *     subscriptions may attach asynchronously; replay makes that
+ *     harmless.
  *
  * Publishers and subscribers are compile-time typed via [StateKey]'s
  * generic parameter; the runtime [AnyEventKey.payloadType] check guards
@@ -357,7 +362,20 @@ class EventManager {
         onEvent: (Any, Any?) -> Unit,
     ) {
         val ownerRef = createWeakOwnerRef(owner)
-        val job = listenerScope.launch {
+        // Signals have no replay to rescue a collector that attaches
+        // late, so their collector starts UNDISPATCHED: the subscriber
+        // slot is allocated synchronously, before listenTo returns,
+        // and a signal fired on the caller's very next line is
+        // delivered instead of silently lost (collect registers the
+        // slot and then suspends; every delivery still resumes on
+        // Main, so rule 3 holds). Replaying keys keep the default
+        // start: replay makes a late attach harmless, and an
+        // undispatched start would hand the cached value to the
+        // callback synchronously on the subscribing thread.
+        val collectorStart =
+            if (key.replays) CoroutineStart.DEFAULT
+            else CoroutineStart.UNDISPATCHED
+        val job = listenerScope.launch(start = collectorStart) {
             flowFor(key).collect { payload ->
                 // Resolve per delivery: a strong owner reference
                 // exists only while the callback runs, which is what

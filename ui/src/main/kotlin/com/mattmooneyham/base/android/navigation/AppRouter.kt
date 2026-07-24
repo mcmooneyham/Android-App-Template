@@ -3,6 +3,7 @@ package com.mattmooneyham.base.android.navigation
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.mattmooneyham.base.android.constants.AppNames
 import java.net.URI
 
 /**
@@ -100,7 +101,9 @@ class AppRouter(
     }
 
     private companion object {
-        const val DEEP_LINK_SCHEME = "baseapp"
+        // Single-point rename: the scheme lives in AppNames (which
+        // also documents the manifest literal that must mirror it).
+        const val DEEP_LINK_SCHEME = AppNames.DEEP_LINK_SCHEME
         const val JOKE_DEEP_LINK_HOST = "joke"
     }
 }

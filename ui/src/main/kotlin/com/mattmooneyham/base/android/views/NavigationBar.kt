@@ -1,6 +1,7 @@
 package com.mattmooneyham.base.android.views
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -43,12 +44,14 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import com.mattmooneyham.base.android.ui.R
 import com.mattmooneyham.base.android.animations.AppAnimations
 import com.mattmooneyham.base.android.navigation.AppRouter
 import com.mattmooneyham.base.android.navigation.AppTab
@@ -59,7 +62,7 @@ import com.mattmooneyham.base.android.viewModels.SettingsViewModel
 import com.mattmooneyham.base.android.constants.BrandColors
 
 data class NavigationPage(
-    val name: String,
+    @StringRes val nameResId: Int,
     val icon: ImageVector,
 )
 
@@ -139,6 +142,8 @@ fun NavigationBar(
                 when (destination) {
                     is HomeDestination.JokeDetail -> JokeDetailPage(
                         jokeId = destination.jokeId,
+                        onLoadJokeDetail =
+                            mainViewModel::loadJokeDetail,
                         onBack = { appRouter.homeRouter.pop() },
                     )
                 }
@@ -303,6 +308,7 @@ private fun TabBarItem(
         label = "tabItemTint",
     )
 
+    val tabLabel = stringResource(tab.nameResId)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         // selectable (not clickable) so screen readers announce the tab
@@ -322,14 +328,14 @@ private fun TabBarItem(
         ) {
             Icon(
                 imageVector = tab.icon,
-                contentDescription = tab.name,
+                contentDescription = tabLabel,
                 tint = itemTint,
                 modifier = Modifier.size(TabIconSize),
             )
         }
         Spacer(modifier = Modifier.height(TabLabelSpacing))
         Text(
-            text = tab.name,
+            text = tabLabel,
             color = itemTint,
             fontSize = TabLabelSize,
             fontWeight = FontWeight.Medium,
@@ -399,13 +405,18 @@ private fun TabPageContainer(
 }
 
 // Display data stays a view concern: the router knows tabs, the view
-// knows their names and icons. Exhaustive: a new tab will not compile
-// until it has display data here.
+// knows their names and icons. Labels are resource IDs so the bar
+// localizes; the composable item resolves them. Exhaustive: a new tab
+// will not compile until it has display data here.
 private fun AppTab.toNavigationPage(): NavigationPage = when (this) {
-    AppTab.HOME ->
-        NavigationPage(name = "Home", icon = Icons.Filled.Home)
-    AppTab.SETTINGS ->
-        NavigationPage(name = "Settings", icon = Icons.Filled.Settings)
+    AppTab.HOME -> NavigationPage(
+        nameResId = R.string.tab_home,
+        icon = Icons.Filled.Home,
+    )
+    AppTab.SETTINGS -> NavigationPage(
+        nameResId = R.string.tab_settings,
+        icon = Icons.Filled.Settings,
+    )
 }
 
 @Preview(showBackground = true)

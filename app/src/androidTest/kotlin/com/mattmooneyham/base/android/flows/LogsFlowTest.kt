@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.mattmooneyham.base.android.MainActivity
+import com.mattmooneyham.base.android.ui.R
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -25,8 +26,12 @@ class LogsFlowTest {
 
     @Test
     fun clearLogsAsksFirstAndOnlyConfirmClearsHistory() {
-        composeRule.tabItem("Settings").performClick()
-        composeRule.waitForText("Clear logs")
+        val clearLogsRow = appString(R.string.settings_clear_logs_title)
+        val dialogTitle = appString(R.string.clear_logs_dialog_title)
+
+        composeRule.tabItem(appString(R.string.tab_settings))
+            .performClick()
+        composeRule.waitForText(clearLogsRow)
 
         // Lay down a distinctive line we can track through the flow.
         val historyMarker = "flow-history-marker-${System.nanoTime()}"
@@ -37,10 +42,12 @@ class LogsFlowTest {
         }
 
         // Cancel preserves the history.
-        composeRule.onNodeWithText("Clear logs").performClick()
-        composeRule.waitForText("Clear logs?")
-        composeRule.onNodeWithText("Cancel").performClick()
-        composeRule.waitForTextGone("Clear logs?")
+        composeRule.onNodeWithText(clearLogsRow).performClick()
+        composeRule.waitForText(dialogTitle)
+        composeRule
+            .onNodeWithText(appString(R.string.clear_logs_dialog_cancel))
+            .performClick()
+        composeRule.waitForTextGone(dialogTitle)
         assertTrue(
             "cancel must not clear the logs",
             appComponent.logManager.readLogContents()
@@ -49,10 +56,11 @@ class LogsFlowTest {
 
         // Confirm clears it. The dialog's confirm button shares its text
         // with the settings row, so it is matched inside the dialog only.
-        composeRule.onNodeWithText("Clear logs").performClick()
-        composeRule.waitForText("Clear logs?")
+        composeRule.onNodeWithText(clearLogsRow).performClick()
+        composeRule.waitForText(dialogTitle)
         composeRule.onNode(
-            hasText("Clear logs").and(hasAnyAncestor(isDialog())),
+            hasText(appString(R.string.clear_logs_dialog_confirm))
+                .and(hasAnyAncestor(isDialog())),
         ).performClick()
         composeRule.waitUntil(FLOW_TIMEOUT_MILLIS) {
             !appComponent.logManager.readLogContents()

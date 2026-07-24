@@ -1,5 +1,6 @@
 package com.mattmooneyham.base.android.util
 
+import kotlin.random.Random
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -22,12 +23,19 @@ import kotlinx.coroutines.delay
  * @param initialDelay wait before the first retry.
  * @param maxDelay ceiling the doubling never exceeds.
  * @param backoffMultiplier growth factor per retry (1.0 = constant).
+ * @param jitterFactor fraction of each computed wait that may be
+ *   randomly shaved off (0.0 = fully deterministic, the default;
+ *   1.0 = anywhere down to zero). Jitter spreads simultaneous
+ *   retriers apart so a shared outage does not end in a synchronized
+ *   stampede; the backoff GROWTH sequence itself stays deterministic,
+ *   only the actual wait is randomized.
  */
 data class RetryPolicy(
     val maxAttempts: Int? = 3,
     val initialDelay: Duration = 500.milliseconds,
     val maxDelay: Duration = 30.seconds,
     val backoffMultiplier: Double = 2.0,
+    val jitterFactor: Double = 0.0,
 ) {
     init {
         require(maxAttempts == null || maxAttempts >= 1) {
@@ -42,7 +50,20 @@ data class RetryPolicy(
         require(backoffMultiplier >= 1.0) {
             "backoffMultiplier must be at least 1.0"
         }
+        require(jitterFactor in 0.0..1.0) {
+            "jitterFactor must be between 0.0 and 1.0"
+        }
     }
+
+    /** The actual wait for a computed backoff delay: unchanged when
+     * [jitterFactor] is zero, otherwise randomly shortened by up to
+     * that fraction. */
+    internal fun jittered(computedDelay: Duration): Duration =
+        if (jitterFactor == 0.0) {
+            computedDelay
+        } else {
+            computedDelay * (1.0 - jitterFactor * Random.nextDouble())
+        }
 }
 
 /**
@@ -84,8 +105,12 @@ suspend fun <ResultType> retry(
             if (attemptsExhausted || !isRetryable(failure)) {
                 throw failure
             }
-            onRetry(attempt, failure, nextDelay)
-            delay(nextDelay)
+            // onRetry reports the ACTUAL coming wait (jitter applied);
+            // the growth sequence keeps compounding the un-jittered
+            // delay so jitter never slows the backoff climb.
+            val actualDelay = policy.jittered(nextDelay)
+            onRetry(attempt, failure, actualDelay)
+            delay(actualDelay)
             nextDelay = (nextDelay * policy.backoffMultiplier)
                 .coerceAtMost(policy.maxDelay)
             attempt += 1
@@ -145,8 +170,11 @@ suspend fun retryForever(
             val attemptsExhausted = policy.maxAttempts != null &&
                 attempt >= policy.maxAttempts
             if (attemptsExhausted) throw failure
-            onRetry(attempt, failure, nextDelay)
-            delay(nextDelay)
+            // Same jitter contract as [retry]: reported and slept
+            // delay match; growth compounds the un-jittered value.
+            val actualDelay = policy.jittered(nextDelay)
+            onRetry(attempt, failure, actualDelay)
+            delay(actualDelay)
             nextDelay = (nextDelay * policy.backoffMultiplier)
                 .coerceAtMost(policy.maxDelay)
             attempt += 1

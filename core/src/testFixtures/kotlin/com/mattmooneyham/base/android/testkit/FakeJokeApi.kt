@@ -1,7 +1,9 @@
 package com.mattmooneyham.base.android.testkit
 
+import com.mattmooneyham.base.android.api.CALL_TIMEOUT_MILLIS
 import com.mattmooneyham.base.android.api.JokeDto
 import io.ktor.client.engine.mock.MockRequestHandleScope
+import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
@@ -35,6 +37,14 @@ class FakeJokeApi {
 
         /** Simulates no connectivity: the request throws IOException. */
         data object ConnectionFailure : PlannedReply
+
+        /** Simulates the call-timeout cap firing (trickling or stalled
+         * response): the request throws Ktor's request timeout. */
+        data object Timeout : PlannedReply
+
+        /** Serves syntactically valid JSON that does not decode into
+         * the DTO (missing required fields). */
+        data object MalformedPayload : PlannedReply
     }
 
     private val repliesLock = Any()
@@ -70,6 +80,18 @@ class FakeJokeApi {
         }
     }
 
+    fun enqueueTimeout() {
+        synchronized(repliesLock) {
+            plannedReplies += PlannedReply.Timeout
+        }
+    }
+
+    fun enqueueMalformedPayload() {
+        synchronized(repliesLock) {
+            plannedReplies += PlannedReply.MalformedPayload
+        }
+    }
+
     /**
      * Parks every subsequent request until [releaseResponses], so a
      * test can assert the in-flight state (e.g. REFRESHING) before the
@@ -88,7 +110,7 @@ class FakeJokeApi {
     /** The MockEngine handler; installed by the test harness
      * (TestAppContext in :app's tests). */
     suspend fun MockRequestHandleScope.serveRequest(
-        @Suppress("UNUSED_PARAMETER") request: HttpRequestData,
+        request: HttpRequestData,
     ): HttpResponseData {
         servedRequestCount.incrementAndGet()
         responseGate?.await()
@@ -113,6 +135,22 @@ class FakeJokeApi {
             )
             PlannedReply.ConnectionFailure ->
                 throw IOException("simulated connection failure")
+            PlannedReply.Timeout ->
+                throw HttpRequestTimeoutException(
+                    request.url.toString(),
+                    CALL_TIMEOUT_MILLIS,
+                )
+            PlannedReply.MalformedPayload -> respond(
+                // Valid JSON, wrong shape: JokeDto's required fields
+                // are absent, so decoding throws and classifies as
+                // FailureKind.DECODE (strict Json, no lenient rescue).
+                content = """{"unexpected":"shape"}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(
+                    HttpHeaders.ContentType,
+                    ContentType.Application.Json.toString(),
+                ),
+            )
         }
     }
 

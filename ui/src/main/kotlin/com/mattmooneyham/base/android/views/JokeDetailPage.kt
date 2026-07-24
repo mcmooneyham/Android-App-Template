@@ -15,35 +15,53 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.mattmooneyham.base.android.managers.JokeStateChanged
+import com.mattmooneyham.base.android.ui.R
+import com.mattmooneyham.base.android.animations.skeletonPulseAlpha
+import com.mattmooneyham.base.android.managers.jokeManager.JokeDetailChanged
+import com.mattmooneyham.base.android.managers.jokeManager.JokeStatus
 import com.mattmooneyham.base.android.views.components.SectionHeader
 import com.mattmooneyham.base.android.views.components.SettingsGroupCard
+import com.mattmooneyham.base.android.views.components.SkeletonLine
 
 /**
  * The pushed-screen exemplar (the iOS sibling's JokeDetailPage): a
  * destination with an argument, reached only through the router,
- * rendered from bus state like every other view. The bus is
- * latest-wins, so the argument's joke may have been superseded; the
- * view says so honestly instead of showing the wrong joke.
+ * rendered from bus state like every other view. The screen rides the
+ * KEYED detail event: it asks the manager to ensure ITS id is loaded
+ * (a cache hit answers instantly, anything else fetches by id) and
+ * renders only states carrying that id, so a cold-start deep link
+ * works and latest-wins replay can never put the wrong joke here.
  */
 @Composable
 fun JokeDetailPage(
     jokeId: Int,
+    onLoadJokeDetail: (Int) -> Unit,
     onBack: () -> Unit,
 ) {
-    val jokeState by eventStateOrNull(key = JokeStateChanged)
-    val joke = jokeState?.joke?.takeIf { loaded -> loaded.id == jokeId }
+    // Re-issued per id and again after process death; the manager
+    // coalesces duplicates, so over-asking is harmless.
+    LaunchedEffect(jokeId) { onLoadJokeDetail(jokeId) }
+    val detailState by eventStateOrNull(key = JokeDetailChanged)
+    val stateForThisId = detailState?.takeIf { detail ->
+        detail.jokeId == jokeId
+    }
     JokeDetailContent(
         jokeId = jokeId,
-        setup = joke?.setup,
-        punchline = joke?.punchline,
+        status = stateForThisId?.status,
+        setup = stateForThisId?.joke?.setup,
+        punchline = stateForThisId?.joke?.punchline,
+        onRetry = { onLoadJokeDetail(jokeId) },
         onBack = onBack,
     )
 }
@@ -51,8 +69,10 @@ fun JokeDetailPage(
 @Composable
 private fun JokeDetailContent(
     jokeId: Int,
+    status: JokeStatus?,
     setup: String?,
     punchline: String?,
+    onRetry: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -69,42 +89,77 @@ private fun JokeDetailContent(
             IconButton(onClick = onBack) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(
+                        R.string.back_content_description,
+                    ),
                     tint = MaterialTheme.colorScheme.onBackground,
                 )
             }
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = "Joke details",
+                text = stringResource(R.string.joke_detail_title),
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
             )
         }
 
-        SectionHeader(title = "Joke #$jokeId")
+        SectionHeader(
+            title = stringResource(
+                R.string.joke_detail_section_title,
+                jokeId,
+            ),
+        )
         SettingsGroupCard {
-            if (setup != null && punchline != null) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = setup,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = punchline,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            when {
+                setup != null && punchline != null -> {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = setup,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = punchline,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme
+                                .onSurfaceVariant,
+                        )
+                    }
                 }
-            } else {
-                Text(
-                    text = "This joke is no longer loaded.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(20.dp),
-                )
+                status == JokeStatus.FAILED -> {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = stringResource(
+                                R.string.joke_detail_unavailable,
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        TextButton(onClick = onRetry) {
+                            Text(
+                                text = stringResource(
+                                    R.string.joke_detail_retry,
+                                ),
+                            )
+                        }
+                    }
+                }
+                else -> {
+                    // null (request not answered yet) or REFRESHING:
+                    // the fetch-by-id is on its way.
+                    val pulseAlpha = skeletonPulseAlpha()
+                    Column(
+                        modifier = Modifier
+                            .padding(20.dp)
+                            .alpha(pulseAlpha),
+                    ) {
+                        SkeletonLine(widthFraction = 0.9f)
+                        Spacer(modifier = Modifier.height(10.dp))
+                        SkeletonLine(widthFraction = 0.55f)
+                    }
+                }
             }
         }
 
@@ -118,8 +173,10 @@ private fun JokeDetailContentPreview() {
     BaseAppTheme {
         JokeDetailContent(
             jokeId = 42,
+            status = JokeStatus.SUCCESS,
             setup = "Why did the developer go broke?",
             punchline = "Because they used up all their cache.",
+            onRetry = {},
             onBack = {},
         )
     }
@@ -127,12 +184,29 @@ private fun JokeDetailContentPreview() {
 
 @Preview(showBackground = true)
 @Composable
-private fun JokeDetailContentUnloadedPreview() {
+private fun JokeDetailContentLoadingPreview() {
     BaseAppTheme {
         JokeDetailContent(
             jokeId = 42,
+            status = JokeStatus.REFRESHING,
             setup = null,
             punchline = null,
+            onRetry = {},
+            onBack = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun JokeDetailContentFailedPreview() {
+    BaseAppTheme {
+        JokeDetailContent(
+            jokeId = 42,
+            status = JokeStatus.FAILED,
+            setup = null,
+            punchline = null,
+            onRetry = {},
             onBack = {},
         )
     }

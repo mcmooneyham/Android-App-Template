@@ -1,5 +1,8 @@
 package com.mattmooneyham.base.android.api
 
+import io.ktor.client.network.sockets.ConnectTimeoutException
+import io.ktor.client.network.sockets.SocketTimeoutException
+import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.plugins.ResponseException
 import io.ktor.serialization.ContentConvertException
 import java.io.IOException
@@ -10,6 +13,7 @@ enum class FailureKind {
     NETWORK,
     HTTP,
     DECODE,
+    TIMEOUT,
     UNKNOWN,
 }
 
@@ -25,6 +29,16 @@ data class FetchFailure(
 
 /** Maps a caught fetch exception to its typed [FetchFailure]. */
 fun Throwable.toFetchFailure(): FetchFailure = when (this) {
+    // Timeout arms come FIRST: every one of these is an IOException,
+    // and the NETWORK arm below would otherwise swallow them.
+    is HttpRequestTimeoutException,
+    is ConnectTimeoutException,
+    is SocketTimeoutException,
+    is java.net.SocketTimeoutException,
+    -> FetchFailure(
+        kind = FailureKind.TIMEOUT,
+        detail = message,
+    )
     is ResponseException -> FetchFailure(
         kind = FailureKind.HTTP,
         detail = "HTTP ${response.status}",

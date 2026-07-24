@@ -4,6 +4,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.mattmooneyham.base.android.MainActivity
+import com.mattmooneyham.base.android.ui.R
 import org.junit.Rule
 import org.junit.Test
 
@@ -20,14 +21,19 @@ class WelcomeFlowTest {
 
     @Test
     fun clearingTheWelcomeFlagReturnsHomeToFirstLaunch() {
+        val clearWelcomeRow = appString(
+            R.string.settings_clear_welcome_title,
+        )
+
         // Launch marks the welcome seen; the session card catches up.
-        composeRule.waitForText("Welcome back!")
+        composeRule.waitForText(appString(R.string.session_welcome_back))
 
-        composeRule.tabItem("Settings").performClick()
-        composeRule.waitForText("Clear welcome flag")
-        composeRule.onNodeWithText("Clear welcome flag").performClick()
+        composeRule.tabItem(appString(R.string.tab_settings))
+            .performClick()
+        composeRule.waitForText(clearWelcomeRow)
+        composeRule.onNodeWithText(clearWelcomeRow).performClick()
 
-        composeRule.tabItem("Home").performClick()
-        composeRule.waitForText("First launch")
+        composeRule.tabItem(appString(R.string.tab_home)).performClick()
+        composeRule.waitForText(appString(R.string.session_first_launch))
     }
 }

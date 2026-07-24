@@ -9,7 +9,8 @@ import org.junit.Test
  * `object X : BooleanFlag(...)` declared in the main sources must be
  * listed in AppFlags.kt, or the FeatureFlagManager would silently
  * skip resolving it and the debug UI would not show it. Walks the
- * shipped source tree at TEST runtime, like CompositionRootGuardTest.
+ * shipped source tree at TEST runtime (never at Gradle configuration
+ * time, which would fight the configuration cache).
  */
 class FeatureFlagRegistryGuardTest {
 

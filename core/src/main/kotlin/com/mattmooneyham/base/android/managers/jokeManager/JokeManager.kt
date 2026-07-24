@@ -1,9 +1,10 @@
-package com.mattmooneyham.base.android.managers
+package com.mattmooneyham.base.android.managers.jokeManager
 
 import com.mattmooneyham.base.android.api.ApiClient
 import com.mattmooneyham.base.android.api.FetchFailure
 import com.mattmooneyham.base.android.api.JokeDto
 import com.mattmooneyham.base.android.api.toFetchFailure
+import com.mattmooneyham.base.android.managers.ConfinedManager
 import com.mattmooneyham.base.android.managers.connectivityManager.NetworkConnectivityChanged
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.eventManager.StateKey
@@ -18,6 +19,15 @@ import kotlinx.coroutines.launch
 object JokeStateChanged : StateKey<JokeState>(
     eventName = "joke.StateChanged",
     payloadType = JokeState::class,
+)
+
+// State: the keyed detail story for one REQUESTED joke id. A separate
+// key from JokeStateChanged because the concerns genuinely differ
+// (the card wants "the latest joke", a detail screen wants "joke N"),
+// which is the sanctioned reason to split payloads.
+object JokeDetailChanged : StateKey<JokeDetailState>(
+    eventName = "joke.DetailChanged",
+    payloadType = JokeDetailState::class,
 )
 
 // Flag: gates the reconnect auto-refresh choreography below. Declared
@@ -51,16 +61,32 @@ data class JokeState(
 )
 
 /**
+ * Payload of [JokeDetailChanged]: THE KEYED LIST-TO-DETAIL PATTERN.
+ * [jokeId] is the requested id, so a screen renders only states for
+ * ITS id and ignores the rest; the latest-wins replay then never puts
+ * the wrong joke on a screen, and a cold-start deep link to any id
+ * loads that id instead of dead-ending on whatever happened to be
+ * cached.
+ */
+data class JokeDetailState(
+    val jokeId: Int,
+    val status: JokeStatus,
+    val joke: JokeDto? = null,
+    val failure: FetchFailure? = null,
+)
+
+/**
  * Owns the demo joke feature, following the app's event-driven manager
  * convention: the manager fetches and publishes; everything else just
  * listens. It loads the first joke eagerly in [start] (never in init:
  * the init budget keeps network IO out of construction), so the UI
  * never has to ask for data, only for refreshes.
  *
- * Publishes a single event, [JokeStateChanged], whose [JokeState]
- * payload carries the whole story: REFRESHING while a fetch is in
- * flight, then SUCCESS with the joke or FAILED with a detail message
- * (both keeping the last good joke available).
+ * Publishes [JokeStateChanged], whose [JokeState] payload carries the
+ * card's whole story: REFRESHING while a fetch is in flight, then
+ * SUCCESS with the joke or FAILED with a typed failure (both keeping
+ * the last good joke available). Detail screens ride the separate
+ * keyed [JokeDetailChanged] via [loadJokeDetail].
  *
  * CHOREOGRAPHY EXEMPLAR: this manager also demonstrates the canonical
  * cross-manager pattern by listening to [NetworkConnectivityChanged].
@@ -114,6 +140,11 @@ class JokeManager(
     // without ever counting as a transition.
     private var shouldRetryOnReconnect = false
     private var lastObservedConnectivity: Boolean? = null
+
+    // Confined: detail fetches currently in flight, by requested id.
+    // Same-id requests coalesce; different ids run independently (the
+    // detail key carries the id, so screens filter for their own).
+    private val detailFetchesInFlight = mutableSetOf<Int>()
 
     init {
         // Construction subscribes but performs no IO; the first fetch
@@ -201,7 +232,7 @@ class JokeManager(
                 // future refresh. The clear still lands BEFORE the
                 // terminal publish below (the moment a listener hears
                 // SUCCESS or FAILED, a new refresh must be accepted;
-                // that ordering is caught as a race by CI), and no
+                // JokeManagerLifecycleSpec pins that ordering), and no
                 // suspension point separates them on this confinement.
                 isFetchInFlight = false
             }
@@ -211,6 +242,70 @@ class JokeManager(
                 shouldRetryOnReconnect = true
             }
             publishState(terminalState)
+        }
+    }
+
+    /**
+     * Loads the joke with [jokeId] for a detail screen, publishing the
+     * lifecycle as [JokeDetailChanged]. THE KEYED LIST-TO-DETAIL
+     * PATTERN: a screen navigated to by id (a pushed row, a cold-start
+     * deep link) asks the manager to ensure its entity is loaded; a
+     * cached hit publishes immediately, anything else fetches by id.
+     * Fire-and-forget from any thread; requests for an id already in
+     * flight coalesce.
+     */
+    fun loadJokeDetail(jokeId: Int) {
+        managerScope.launch {
+            val cachedJoke = latestJoke?.takeIf { it.id == jokeId }
+            if (cachedJoke != null) {
+                eventManager.trigger(
+                    JokeDetailChanged,
+                    JokeDetailState(
+                        jokeId = jokeId,
+                        status = JokeStatus.SUCCESS,
+                        joke = cachedJoke,
+                    ),
+                )
+                return@launch
+            }
+            if (!detailFetchesInFlight.add(jokeId)) return@launch
+            eventManager.trigger(
+                JokeDetailChanged,
+                JokeDetailState(
+                    jokeId = jokeId,
+                    status = JokeStatus.REFRESHING,
+                ),
+            )
+            val terminalState = try {
+                logManager.debug("Fetching joke #$jokeId")
+                // The Official Joke API's by-id route: jokes/<id>.
+                val joke = apiClient.get<JokeDto>("jokes/$jokeId")
+                logManager.info("Fetched joke #${joke.id} by id")
+                JokeDetailState(
+                    jokeId = jokeId,
+                    status = JokeStatus.SUCCESS,
+                    joke = joke,
+                )
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (exception: Exception) {
+                val failure = exception.toFetchFailure()
+                logManager.warn(
+                    "Joke #$jokeId fetch failed " +
+                        "[${failure.kind}]: ${failure.detail}",
+                )
+                JokeDetailState(
+                    jokeId = jokeId,
+                    status = JokeStatus.FAILED,
+                    failure = failure,
+                )
+            } finally {
+                // Same guarantee as refreshJoke's finally: the id is
+                // released on EVERY exit, so no failure mode can wedge
+                // future requests for it.
+                detailFetchesInFlight.remove(jokeId)
+            }
+            eventManager.trigger(JokeDetailChanged, terminalState)
         }
     }
 

@@ -1,6 +1,7 @@
 package com.mattmooneyham.base.android.managers
 
 import com.mattmooneyham.base.android.managers.connectivityManager.NetworkConnectivityChanged
+import com.mattmooneyham.base.android.testkit.FakeConnectivityMonitor
 import com.mattmooneyham.base.android.testkit.TestAppContext
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -34,7 +35,8 @@ class ConnectivityManagerSpec {
             val recorder = app.newRecorder()
                 .record(NetworkConnectivityChanged)
 
-            // The construction seed publishes the initial false.
+            // The monitor's start-time report of the CURRENT state
+            // (offline, the fake's default world) is the first fact.
             assertEquals(
                 false,
                 recorder.expectState(NetworkConnectivityChanged),
@@ -57,5 +59,27 @@ class ConnectivityManagerSpec {
                 false,
                 recorder.expectState(NetworkConnectivityChanged),
             )
+        }
+
+    @Test
+    fun `a boot while online is one fact, never a reconnect edge`() =
+        runBlocking<Unit> {
+            // The device is online BEFORE the app starts: the
+            // monitor's first report is true, and no fabricated
+            // "offline" precedes it, so reconnect choreography can
+            // never mistake startup for a restored connection.
+            val app = TestAppContext(
+                connectivityMonitor = FakeConnectivityMonitor(
+                    initialConnectivity = true,
+                ),
+            ).also { testContext = it }
+            val recorder = app.newRecorder()
+                .record(NetworkConnectivityChanged)
+
+            assertEquals(
+                true,
+                recorder.expectState(NetworkConnectivityChanged),
+            )
+            recorder.assertNoEvent(NetworkConnectivityChanged)
         }
 }

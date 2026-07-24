@@ -1,6 +1,10 @@
 package com.mattmooneyham.base.android.managers
 
 import com.mattmooneyham.base.android.api.FailureKind
+import com.mattmooneyham.base.android.api.JokeDto
+import com.mattmooneyham.base.android.managers.jokeManager.JokeDetailChanged
+import com.mattmooneyham.base.android.managers.jokeManager.JokeStateChanged
+import com.mattmooneyham.base.android.managers.jokeManager.JokeStatus
 import com.mattmooneyham.base.android.testkit.FakeJokeApi
 import com.mattmooneyham.base.android.testkit.TestAppContext
 import kotlinx.coroutines.delay
@@ -107,6 +111,127 @@ class JokeManagerLifecycleSpec {
             // it next to the typed failure reason.
             assertEquals(FakeJokeApi.DEFAULT_JOKE, failedState.joke)
             assertEquals(FailureKind.HTTP, failedState.failure?.kind)
+        }
+
+    @Test
+    fun `a cached detail request answers without a network fetch`() =
+        runBlocking<Unit> {
+            val app = startApp()
+            val recorder = app.newRecorder()
+                .record(JokeStateChanged)
+                .record(JokeDetailChanged)
+            recorder.expectStateMatching(JokeStateChanged) { state ->
+                state.status == JokeStatus.SUCCESS
+            }
+
+            // The startup joke (DEFAULT_JOKE, id 1) is already cached:
+            // the keyed request publishes SUCCESS immediately.
+            app.component.jokeManager.loadJokeDetail(
+                FakeJokeApi.DEFAULT_JOKE.id,
+            )
+
+            val detailState = recorder.expectStateMatching(
+                JokeDetailChanged,
+            ) { detail -> detail.status == JokeStatus.SUCCESS }
+            assertEquals(FakeJokeApi.DEFAULT_JOKE, detailState.joke)
+            // Exactly one request ever went out: the startup fetch.
+            assertEquals(1, jokeApi.requestCount)
+        }
+
+    @Test
+    fun `an uncached detail request fetches by id and stays keyed`() =
+        runBlocking<Unit> {
+            val app = startApp()
+            val recorder = app.newRecorder()
+                .record(JokeStateChanged)
+                .record(JokeDetailChanged)
+            recorder.expectStateMatching(JokeStateChanged) { state ->
+                state.status == JokeStatus.SUCCESS
+            }
+
+            val keyedJoke = JokeDto(
+                id = 7,
+                type = "general",
+                setup = "What id did the deep link ask for?",
+                punchline = "This one.",
+            )
+            jokeApi.enqueueSuccess(keyedJoke)
+            app.component.jokeManager.loadJokeDetail(7)
+
+            // The lifecycle is keyed: every state carries the
+            // REQUESTED id, so a detail screen ignores other ids.
+            val loadingState = recorder.expectStateMatching(
+                JokeDetailChanged,
+            ) { detail -> detail.status == JokeStatus.REFRESHING }
+            assertEquals(7, loadingState.jokeId)
+
+            val loadedState = recorder.expectStateMatching(
+                JokeDetailChanged,
+            ) { detail -> detail.status == JokeStatus.SUCCESS }
+            assertEquals(keyedJoke, loadedState.joke)
+            assertEquals(2, jokeApi.requestCount)
+        }
+
+    @Test
+    fun `a failed detail fetch publishes a keyed typed failure`() =
+        runBlocking<Unit> {
+            val app = startApp()
+            val recorder = app.newRecorder()
+                .record(JokeStateChanged)
+                .record(JokeDetailChanged)
+            recorder.expectStateMatching(JokeStateChanged) { state ->
+                state.status == JokeStatus.SUCCESS
+            }
+
+            jokeApi.enqueueHttpError()
+            app.component.jokeManager.loadJokeDetail(9)
+
+            val failedState = recorder.expectStateMatching(
+                JokeDetailChanged,
+            ) { detail -> detail.status == JokeStatus.FAILED }
+            assertEquals(9, failedState.jokeId)
+            assertEquals(FailureKind.HTTP, failedState.failure?.kind)
+        }
+
+    @Test
+    fun `a timed-out fetch classifies as TIMEOUT, not NETWORK`() =
+        runBlocking<Unit> {
+            val app = startApp()
+            val recorder = app.newRecorder().record(JokeStateChanged)
+            recorder.expectStateMatching(JokeStateChanged) { state ->
+                state.status == JokeStatus.SUCCESS
+            }
+
+            jokeApi.enqueueTimeout()
+            app.component.jokeManager.refreshJoke()
+
+            val failedState = recorder.expectStateMatching(
+                JokeStateChanged,
+            ) { state -> state.status == JokeStatus.FAILED }
+            // The call-timeout cap is a first-class failure category:
+            // views can say "took too long" instead of "check your
+            // connection", and the in-flight flag is provably clear.
+            assertEquals(FailureKind.TIMEOUT, failedState.failure?.kind)
+        }
+
+    @Test
+    fun `an undecodable payload classifies as DECODE`() =
+        runBlocking<Unit> {
+            val app = startApp()
+            val recorder = app.newRecorder().record(JokeStateChanged)
+            recorder.expectStateMatching(JokeStateChanged) { state ->
+                state.status == JokeStatus.SUCCESS
+            }
+
+            jokeApi.enqueueMalformedPayload()
+            app.component.jokeManager.refreshJoke()
+
+            val failedState = recorder.expectStateMatching(
+                JokeStateChanged,
+            ) { state -> state.status == JokeStatus.FAILED }
+            // Strict Json (no lenient mode) is what guarantees a wrong
+            // payload SURFACES here instead of being silently coerced.
+            assertEquals(FailureKind.DECODE, failedState.failure?.kind)
         }
 
     @Test

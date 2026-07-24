@@ -5,14 +5,16 @@ import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
+import com.mattmooneyham.base.android.constants.AppNames
 import java.io.File
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
-// DataStore requires this exact file extension; it is checked at runtime.
-const val DATA_STORE_FILE_NAME = "base_app.preferences_pb"
+// DataStore requires the .preferences_pb extension (checked at
+// runtime); the actual name lives in AppNames for single-point rename.
+const val DATA_STORE_FILE_NAME = AppNames.PREFERENCES_STORE_FILE_NAME
 
 /**
  * The scope DataStore runs its IO on. Created by whoever owns the store

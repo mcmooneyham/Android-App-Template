@@ -1,8 +1,8 @@
 package com.mattmooneyham.base.android.viewModels
 
 import com.mattmooneyham.base.android.managers.dataStoreManager.HasSeenWelcomeChanged
-import com.mattmooneyham.base.android.managers.JokeStateChanged
-import com.mattmooneyham.base.android.managers.JokeStatus
+import com.mattmooneyham.base.android.managers.jokeManager.JokeStateChanged
+import com.mattmooneyham.base.android.managers.jokeManager.JokeStatus
 import com.mattmooneyham.base.android.testkit.TestAppContext
 import kotlinx.coroutines.runBlocking
 import org.junit.After

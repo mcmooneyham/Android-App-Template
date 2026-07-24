@@ -1,7 +1,7 @@
 package com.mattmooneyham.base.android.testkit
 
-import com.mattmooneyham.base.android.managers.JokeStateChanged
-import com.mattmooneyham.base.android.managers.JokeStatus
+import com.mattmooneyham.base.android.managers.jokeManager.JokeStateChanged
+import com.mattmooneyham.base.android.managers.jokeManager.JokeStatus
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals

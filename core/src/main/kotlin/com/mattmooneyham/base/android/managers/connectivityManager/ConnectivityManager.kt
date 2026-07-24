@@ -5,9 +5,6 @@ import com.mattmooneyham.base.android.managers.eventManager.EventLifetime
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.eventManager.StateKey
 import com.mattmooneyham.base.android.managers.logManager.LogManager
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 // State: whether the device has a usable, validated network path.
@@ -23,10 +20,13 @@ object NetworkConnectivityChanged : StateKey<Boolean>(
 )
 
 /**
- * Owns connectivity state for the app: state, events, and logging. The
- * platform hookup lives behind the injected [ConnectivityMonitor]
- * boundary (AndroidConnectivityMonitor in :app's platform package is
- * the real one; tests inject a fake and drive changes by hand).
+ * Owns connectivity for the app: events and logging. The platform
+ * hookup lives behind the injected [ConnectivityMonitor] boundary
+ * (AndroidConnectivityMonitor in :app's platform package is the real
+ * one; tests inject a fake and drive changes by hand). Consumers
+ * observe [NetworkConnectivityChanged] on the bus, the one observation
+ * idiom in the app; the manager deliberately exposes no second
+ * surface.
  *
  * The name deliberately matches android.net.ConnectivityManager: this
  * module has no Android classpath, so the two can never collide here,
@@ -45,19 +45,16 @@ class ConnectivityManager(
     failureLogManager = logManager,
 ) {
 
-    private val mutableConnectivityState = MutableStateFlow(false)
-
-    /** True while the device has a usable, validated network path. */
-    val connectivityState: StateFlow<Boolean> =
-        mutableConnectivityState.asStateFlow()
+    // Confined: the last state actually published; null until the
+    // monitor's first report so that report lands as a plain fact,
+    // never as an edge relative to an assumed value.
+    private var lastPublishedConnectivity: Boolean? = null
 
     init {
-        // Seed the replay cache BEFORE starting the monitor: the first
-        // system update can arrive immediately, and publishing the
-        // initial false afterwards could overwrite it. The seed runs on
-        // the constructing thread, which is safe: no managerScope
-        // coroutine can exist yet.
-        publishConnectivity(mutableConnectivityState.value)
+        // The monitor's contract delivers the device's CURRENT state
+        // during start and every change after; nothing here seeds a
+        // guess, so a boot while online can never masquerade as an
+        // offline-to-online reconnect edge.
         connectivityMonitor.start { isConnected ->
             // Monitor callbacks arrive on a platform thread; hop onto
             // the manager's confinement so the read-then-publish below
@@ -66,34 +63,28 @@ class ConnectivityManager(
                 // Publish CHANGES only (the platform reports duplicate
                 // states routinely). The bus also suppresses unchanged
                 // state; gating at the source additionally skips the
-                // log line and the trigger overhead, and keeps the
-                // stream strictly alternating so edge detection stays
-                // safe over the lossy DROP_OLDEST buffer.
-                if (isConnected != mutableConnectivityState.value) {
+                // log line, and keeps the stream strictly alternating
+                // so edge detection stays safe over the lossy
+                // DROP_OLDEST buffer.
+                if (isConnected != lastPublishedConnectivity) {
                     logManager.info(
                         if (isConnected) "Network available"
                         else "Network lost",
                     )
-                    publishConnectivity(isConnected)
+                    lastPublishedConnectivity = isConnected
+                    eventManager.trigger(
+                        NetworkConnectivityChanged,
+                        isConnected,
+                    )
                 }
             }
         }
     }
 
-    /** Stops monitoring; a stopped manager cannot be restarted. */
-    fun stopMonitoring() {
-        connectivityMonitor.stop()
-    }
-
     /** Stops monitoring, then cancels the manager's coroutines. */
     override fun close() {
-        stopMonitoring()
+        connectivityMonitor.stop()
         super.close()
-    }
-
-    private fun publishConnectivity(isConnected: Boolean) {
-        mutableConnectivityState.value = isConnected
-        eventManager.trigger(NetworkConnectivityChanged, isConnected)
     }
 
 }

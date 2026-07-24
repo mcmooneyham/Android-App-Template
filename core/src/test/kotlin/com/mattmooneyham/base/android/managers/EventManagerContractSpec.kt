@@ -9,6 +9,8 @@ import java.lang.ref.Reference
 import java.lang.ref.WeakReference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -163,6 +165,88 @@ class EventManagerContractSpec {
         // Firing twice means two facts; suppression would lose one.
         assertEquals(2, signalCount)
         Reference.reachabilityFence(listenerOwner)
+    }
+
+    @Test
+    fun `a signal subscription is live before listenTo returns`() {
+        // A QUEUEING Main (unlike the unconfined harness above) leaves
+        // everything posted to Main unexecuted until runCurrent: the
+        // production shape, where onCreate owns the main thread and
+        // posted work cannot run until it unwinds.
+        val scheduler = TestCoroutineScheduler()
+        Dispatchers.setMain(StandardTestDispatcher(scheduler))
+        val queuedMainBus = EventManager()
+        try {
+            var signalCount = 0
+            val listenerOwner = Any()
+            queuedMainBus.listenTo(TestPingFired, listenerOwner) {
+                signalCount += 1
+            }
+            // Fired before ANY posted Main work has run. Ordering rule
+            // 6: the signal subscription is already live, so this is
+            // delivered (on Main) instead of vanishing into the
+            // replay-less stream.
+            queuedMainBus.trigger(TestPingFired)
+            scheduler.runCurrent()
+            assertEquals(1, signalCount)
+            Reference.reachabilityFence(listenerOwner)
+        } finally {
+            queuedMainBus.close()
+        }
+    }
+
+    @Test
+    fun `state overflow drops the oldest and delivers a contiguous suffix`() {
+        val scheduler = TestCoroutineScheduler()
+        Dispatchers.setMain(StandardTestDispatcher(scheduler))
+        val queuedMainBus = EventManager()
+        try {
+            val receivedPayloads = mutableListOf<Int>()
+            val listenerOwner = Any()
+            queuedMainBus.listenTo(TestCounterChanged, listenerOwner) {
+                receivedPayloads += it
+            }
+            // Attach the collector, then park Main so the burst below
+            // overflows the buffer instead of being consumed.
+            scheduler.runCurrent()
+            (1..30).forEach { value ->
+                queuedMainBus.trigger(TestCounterChanged, value)
+            }
+            scheduler.runCurrent()
+            // replay(1) + extraBuffer(16) = 17 slots: DROP_OLDEST
+            // sheds 1..13 and keeps the newest 17 as a CONTIGUOUS
+            // suffix. This is the drop-suffix property the
+            // ConnectivityManager edge-detection safety argument
+            // rests on, pinned here instead of assumed.
+            assertEquals((14..30).toList(), receivedPayloads)
+            Reference.reachabilityFence(listenerOwner)
+        } finally {
+            queuedMainBus.close()
+        }
+    }
+
+    @Test
+    fun `signal overflow sheds the oldest firings silently`() {
+        val scheduler = TestCoroutineScheduler()
+        Dispatchers.setMain(StandardTestDispatcher(scheduler))
+        val queuedMainBus = EventManager()
+        try {
+            var signalCount = 0
+            val listenerOwner = Any()
+            queuedMainBus.listenTo(TestPingFired, listenerOwner) {
+                signalCount += 1
+            }
+            repeat(70) { queuedMainBus.trigger(TestPingFired) }
+            scheduler.runCurrent()
+            // Signal capacity is 64; the first 6 firings are shed with
+            // no trace, BY DESIGN (latest wins, the caller never
+            // blocks). Anything that cannot tolerate this belongs in
+            // the durable pipeline, not on the bus.
+            assertEquals(64, signalCount)
+            Reference.reachabilityFence(listenerOwner)
+        } finally {
+            queuedMainBus.close()
+        }
     }
 
     @Test

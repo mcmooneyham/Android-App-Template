@@ -5,12 +5,13 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import com.mattmooneyham.base.android.managers.ConfinedManager
+import com.mattmooneyham.base.android.managers.eventManager.EventLifetime
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.eventManager.StateKey
 import com.mattmooneyham.base.android.managers.logManager.LogManager
+import com.mattmooneyham.base.android.managers.logManager.bridgeRetryReporter
 import com.mattmooneyham.base.android.util.RetryPolicy
 import com.mattmooneyham.base.android.util.retryForever
-import kotlin.time.Duration
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -20,6 +21,11 @@ import kotlinx.coroutines.launch
 object HasSeenWelcomeChanged : StateKey<Boolean>(
     eventName = "datastore.HasSeenWelcomeChanged",
     payloadType = Boolean::class,
+    // APP lifetime: the preference file is device-persistent and the
+    // bridge below re-publishes only on VALUE CHANGES, so a SESSION
+    // key would go dark after resetSessionReplayCaches() until the
+    // next changing write (same reasoning as FeatureFlagsChanged).
+    lifetime = EventLifetime.APP,
 )
 
 /**
@@ -70,33 +76,14 @@ class DataStoreManager(
         managerScope.launch {
             retryForever(
                 policy = RetryPolicy(maxAttempts = null),
-                onRetry = ::reportBridgeFailure,
+                onRetry = logManager
+                    .bridgeRetryReporter("hasSeenWelcome bridge"),
             ) { onHealthy ->
                 hasSeenWelcome.collect { hasSeen ->
                     onHealthy()
                     eventManager.trigger(HasSeenWelcomeChanged, hasSeen)
                 }
             }
-        }
-    }
-
-    /** First failure per outage at ERROR, repeats at WARN. */
-    private fun reportBridgeFailure(
-        attempt: Int,
-        streamFailure: Throwable,
-        nextDelay: Duration,
-    ) {
-        if (attempt == 1) {
-            logManager.error(
-                "hasSeenWelcome bridge failed; resubscribing in " +
-                    "$nextDelay",
-                throwable = streamFailure,
-            )
-        } else {
-            logManager.warn(
-                "hasSeenWelcome bridge failed again " +
-                    "(attempt $attempt); resubscribing in $nextDelay",
-            )
         }
     }
 

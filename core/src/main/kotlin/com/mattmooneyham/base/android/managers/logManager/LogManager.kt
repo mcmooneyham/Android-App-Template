@@ -1,5 +1,6 @@
 package com.mattmooneyham.base.android.managers.logManager
 
+import com.mattmooneyham.base.android.constants.AppNames
 import com.mattmooneyham.base.android.constants.LogLevel
 import com.mattmooneyham.base.android.managers.ConfinedManager
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
@@ -90,7 +91,7 @@ class LoggedError internal constructor(
  *
  * The log file rotates by size: when it reaches
  * [maxLogFileSizeBytes], it is renamed with a `.1` inserted before
- * the extension (base-app.log becomes base-app.1.log, replacing any
+ * the extension (base_app.log becomes base_app.1.log, replacing any
  * previous rotation), and a fresh file starts. At most one rotated
  * file is kept, capping total disk use at roughly twice the limit.
  *
@@ -326,7 +327,7 @@ class LogManager(
             .map { pathString -> pathString.toPath() }
             .filter { path -> FileSystem.SYSTEM.exists(path) }
 
-    /** "base-app.log" exports as "base-app-export.log". */
+    /** "base_app.log" exports as "base_app-export.log". */
     private fun exportLogFilePath(livePath: String): String {
         val extension = livePath.substringAfterLast('.', "")
         return if (extension.isEmpty()) {
@@ -648,7 +649,8 @@ class LogManager(
         .format(LOG_TIMESTAMP_FORMAT)
 
     companion object {
-        const val DEFAULT_LOG_FILE_NAME = "base-app.log"
+        // Single-point rename: the actual stem lives in AppNames.
+        const val DEFAULT_LOG_FILE_NAME = AppNames.LOG_FILE_NAME
 
         // Rotation cap: two files of this size is ample demo/support
         // history while staying invisible next to any app's cache use.

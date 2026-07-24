@@ -7,13 +7,20 @@ import com.mattmooneyham.base.android.managers.connectivityManager.ConnectivityM
  * starts it during component construction; tests then drive
  * connectivity changes deterministically with [setConnected].
  *
+ * Honors the port contract: the first report, delivered during
+ * [start], is the monitor's CURRENT state ([initialConnectivity],
+ * offline by default), exactly like the real adapter's synchronous
+ * capability query.
+ *
  * The callback is invoked on the CALLER's thread, mirroring the real
  * monitor's "possibly from a background thread" contract;
  * ConnectivityManager hops onto its own confinement either way, so
  * connectivity-driven assertions must await events rather than assume
  * synchronous publication.
  */
-class FakeConnectivityMonitor : ConnectivityMonitor {
+class FakeConnectivityMonitor(
+    private val initialConnectivity: Boolean = false,
+) : ConnectivityMonitor {
 
     @Volatile
     private var onConnectivityChanged: ((Boolean) -> Unit)? = null
@@ -32,6 +39,9 @@ class FakeConnectivityMonitor : ConnectivityMonitor {
         // Mirror the real monitor: starting twice is a no-op.
         if (this.onConnectivityChanged != null) return
         this.onConnectivityChanged = onConnectivityChanged
+        // Port contract: the first report is the CURRENT state,
+        // delivered during start.
+        onConnectivityChanged(initialConnectivity)
     }
 
     override fun stop() {

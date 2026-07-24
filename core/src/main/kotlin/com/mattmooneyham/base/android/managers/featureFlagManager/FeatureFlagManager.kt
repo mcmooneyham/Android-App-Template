@@ -4,14 +4,15 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import com.mattmooneyham.base.android.constants.AppNames
 import com.mattmooneyham.base.android.managers.ConfinedManager
 import com.mattmooneyham.base.android.managers.eventManager.EventLifetime
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.eventManager.StateKey
 import com.mattmooneyham.base.android.managers.logManager.LogManager
+import com.mattmooneyham.base.android.managers.logManager.bridgeRetryReporter
 import com.mattmooneyham.base.android.util.RetryPolicy
 import com.mattmooneyham.base.android.util.retryForever
-import kotlin.time.Duration
 import kotlinx.coroutines.launch
 
 // State: the resolved value and deciding layer of every declared flag.
@@ -102,7 +103,8 @@ class FeatureFlagManager(
             managerScope.launch {
                 retryForever(
                     policy = RetryPolicy(maxAttempts = null),
-                    onRetry = ::reportBridgeFailure,
+                    onRetry = logManager
+                        .bridgeRetryReporter("Flag override bridge"),
                 ) { onHealthy ->
                     overridesStore.data.collect { preferences ->
                         onHealthy()
@@ -179,25 +181,6 @@ class FeatureFlagManager(
     }
 
     /** First failure per outage at ERROR, repeats at WARN. */
-    private fun reportBridgeFailure(
-        attempt: Int,
-        storeFailure: Throwable,
-        nextDelay: Duration,
-    ) {
-        if (attempt == 1) {
-            logManager.error(
-                "Flag override bridge failed; resubscribing in " +
-                    "$nextDelay",
-                throwable = storeFailure,
-            )
-        } else {
-            logManager.warn(
-                "Flag override bridge failed again " +
-                    "(attempt $attempt); resubscribing in $nextDelay",
-            )
-        }
-    }
-
     /** Stops the provider, then cancels the manager's coroutines. */
     override fun close() {
         provider.stop()
@@ -227,9 +210,11 @@ class FeatureFlagManager(
     }
 
     companion object {
-        // DataStore requires this exact extension; the file sits beside
-        // the app's main preferences store but stays its own store
-        // (DataStore allows one instance per file per process).
-        const val FLAG_OVERRIDES_FILE_NAME = "feature_flags.preferences_pb"
+        // The file sits beside the app's main preferences store but
+        // stays its own store (DataStore allows one instance per file
+        // per process); the name lives in AppNames for single-point
+        // rename.
+        const val FLAG_OVERRIDES_FILE_NAME =
+            AppNames.FLAG_OVERRIDES_STORE_FILE_NAME
     }
 }

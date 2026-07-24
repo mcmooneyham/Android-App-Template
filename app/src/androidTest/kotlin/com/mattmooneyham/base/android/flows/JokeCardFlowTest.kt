@@ -5,6 +5,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import com.mattmooneyham.base.android.MainActivity
+import com.mattmooneyham.base.android.ui.R
 import org.junit.Rule
 import org.junit.Test
 
@@ -22,20 +23,24 @@ class JokeCardFlowTest {
 
     @Test
     fun refreshCyclesTheLoadingStateAndSettles() {
+        val refreshLabel = appString(
+            R.string.joke_card_refresh_content_description,
+        )
+
         // Launch fetch settles: the refresh affordance appears.
         composeRule.waitUntil(FLOW_TIMEOUT_MILLIS) {
-            composeRule.onAllNodesWithContentDescription("Refresh joke")
+            composeRule.onAllNodesWithContentDescription(refreshLabel)
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithContentDescription("Refresh joke")
+        composeRule.onNodeWithContentDescription(refreshLabel)
             .performClick()
 
         // The refresh round trip must settle again (the spinner phase is
         // transient and can outrun the semantics poller on a fast
         // network, so its brief absence is deliberately not asserted).
         composeRule.waitUntil(FLOW_TIMEOUT_MILLIS) {
-            composeRule.onAllNodesWithContentDescription("Refresh joke")
+            composeRule.onAllNodesWithContentDescription(refreshLabel)
                 .fetchSemanticsNodes().isNotEmpty()
         }
     }

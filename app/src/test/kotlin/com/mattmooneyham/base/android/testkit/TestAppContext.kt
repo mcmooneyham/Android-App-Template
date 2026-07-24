@@ -1,15 +1,13 @@
 package com.mattmooneyham.base.android.testkit
 
+import com.mattmooneyham.base.android.api.createHttpClient
 import com.mattmooneyham.base.android.constants.LogLevel
 import com.mattmooneyham.base.android.di.AppComponent
 import com.mattmooneyham.base.android.di.AppConfig
 import com.mattmooneyham.base.android.managers.logManager.CrashReporter
 import com.mattmooneyham.base.android.managers.logManager.NoOpCrashReporter
 import com.mattmooneyham.base.android.managers.logManager.LogManager
-import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.serialization.kotlinx.json.json
 import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +17,6 @@ import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
-import kotlinx.serialization.json.Json
 
 /**
  * Per-test harness around a REAL [AppComponent]. Everything inside the
@@ -59,10 +56,14 @@ class TestAppContext(
     // construction, so existing specs keep their semantics; pass
     // false to observe the construction window (the init budget).
     autoStart: Boolean = true,
+    // The fake reports its initial state during start (the port
+    // contract); pass one built with initialConnectivity = true to
+    // spec a boot-while-online world.
+    val connectivityMonitor: FakeConnectivityMonitor =
+        FakeConnectivityMonitor(),
 ) {
 
     val mainDispatcher: TestDispatcher = UnconfinedTestDispatcher()
-    val connectivityMonitor = FakeConnectivityMonitor()
     val flagProvider = FakeFeatureFlagProvider()
     val clock = VirtualClock()
 
@@ -83,11 +84,18 @@ class TestAppContext(
                     appFilesDirectory = filesDirectory,
                     connectivityMonitor = connectivityMonitor,
                     minimumLogLevel = minimumLogLevel,
-                    // The one HTTP seam: every ApiClient a manager
-                    // builds wraps this client, so ALL requests land
-                    // on the MockEngine whatever their endpoint URL.
+                    // The one HTTP seam: the PRODUCTION factory over a
+                    // scripted MockEngine, so every spec exercises the
+                    // real client configuration (expectSuccess,
+                    // negotiation, timeouts) and ALL requests land on
+                    // the fake whatever their endpoint URL.
                     httpClientFactory = { json ->
-                        buildMockHttpClient(json)
+                        createHttpClient(
+                            json = json,
+                            engine = MockEngine { request ->
+                                with(jokeApi) { serveRequest(request) }
+                            },
+                        )
                     },
                     clock = clock,
                     crashReporter = crashReporter,
@@ -144,23 +152,6 @@ class TestAppContext(
             "Could not delete test files directory $filesDirectory"
         }
     }
-
-    /**
-     * Mirrors the production factory's behavior contract (expectSuccess
-     * plus JSON content negotiation) on top of the scripted MockEngine.
-     */
-    private fun buildMockHttpClient(json: Json): HttpClient =
-        HttpClient(MockEngine) {
-            expectSuccess = true
-            install(ContentNegotiation) {
-                json(json)
-            }
-            engine {
-                addHandler { request ->
-                    with(jokeApi) { serveRequest(request) }
-                }
-            }
-        }
 
     companion object {
         // Teardown deletion retry: ample for one in-flight file write.
