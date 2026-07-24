@@ -64,10 +64,11 @@ class ConnectivityManager(
             // is race-free. The serial scope preserves callback order.
             managerScope.launch {
                 // Publish CHANGES only (the platform reports duplicate
-                // states routinely). Deduping makes the stream strictly
-                // alternating, which is what lets subscribers do edge
-                // detection safely over the lossy DROP_OLDEST buffer:
-                // any surviving suffix still contains every adjacency.
+                // states routinely). The bus also suppresses unchanged
+                // state; gating at the source additionally skips the
+                // log line and the trigger overhead, and keeps the
+                // stream strictly alternating so edge detection stays
+                // safe over the lossy DROP_OLDEST buffer.
                 if (isConnected != mutableConnectivityState.value) {
                     logManager.info(
                         if (isConnected) "Network available"

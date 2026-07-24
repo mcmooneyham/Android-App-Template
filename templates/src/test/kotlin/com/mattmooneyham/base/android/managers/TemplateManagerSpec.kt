@@ -104,7 +104,11 @@ class TemplateManagerSpec {
             // Direct-construction specs call start() themselves
             // (TestAppContext's autoStart does it for component specs).
             templateManager.start()
-            recorder.expectState(TemplateStateChanged)
+
+            // start()'s republish carries UNCHANGED state here, and
+            // the bus suppresses unchanged state (subscribers already
+            // hold the current value): no duplicate delivery arrives.
+            recorder.assertNoEvent(TemplateStateChanged)
             assertTrue(templatePort.isStarted)
         }
 

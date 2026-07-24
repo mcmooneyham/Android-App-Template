@@ -142,6 +142,9 @@ class TemplateManager(
     override fun start() {
         managerScope.launch {
             logManager.info("Template warmup complete")
+            // A real warmup publishes FRESH data. If nothing changed
+            // since the construction seed, the bus suppresses this
+            // republish: unchanged state is never re-delivered.
             publishState()
         }
     }

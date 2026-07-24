@@ -27,6 +27,11 @@ import kotlin.collections.iterator
  * - For state keys, the most recent payload is cached and replayed to
  *   new listeners; a listener only receives a replay if the event has
  *   been triggered at least once. Signal keys never replay.
+ * - UNCHANGED STATE IS NOT RE-DELIVERED: triggering a state key with
+ *   a payload equal to the cached value is suppressed (no delivery,
+ *   no breadcrumb; a debug trace only). Subscribers already hold the
+ *   current value, so a duplicate carries no information. Signals
+ *   always deliver: firing twice means two facts.
  * - The manager OWNS every event stream ([flowsByKey]); keys are pure
  *   identifiers. Rebuilding the manager therefore drops all cached
  *   state, and [resetSessionReplayCaches] clears the replay caches of
@@ -300,21 +305,50 @@ class EventManager {
 
     private fun publish(key: AnyEventKey, payload: Any?) {
         if (!isPayloadValid(key, payload)) return
+        // The duplicate check and the emit share ONE lock hold
+        // (reentrant with flowFor's own) so a trigger racing
+        // resetSessionReplayCaches cannot land a pre-reset payload in
+        // a just-cleared replay cache. tryEmit never blocks under
+        // DROP_OLDEST, so the hold stays trivial.
+        val suppressedDuplicate = synchronized(flowsLock) {
+            val flow = flowFor(key)
+            // EARLY ABORT for unchanged state: a state payload equal
+            // to the cached replay value carries no information (late
+            // subscribers receive the current value on subscription),
+            // so it is not delivered. Meaningful because payloads are
+            // immutable data classes by doctrine. Signals NEVER
+            // dedupe: firing twice means two facts. A session reset
+            // clears the cache, so post-reset re-publication of the
+            // same value still delivers.
+            if (key.replays &&
+                flow.replayCache.firstOrNull() == payload
+            ) {
+                true
+            } else {
+                flow.tryEmit(payload)
+                false
+            }
+        }
+        if (suppressedDuplicate) {
+            // Debug-only trace (not a breadcrumb): suppression is a
+            // non-event, but "why didn't my listener fire" deserves
+            // an answer in debug builds.
+            logManager?.debug(
+                "Suppressed duplicate '${key.eventName}'" +
+                    describePayload(payload),
+            )
+            return
+        }
         // Breadcrumb, not debug: the trace always reaches the crash
         // report's bounded ring, so production post-mortems see the
         // recent bus history even though release builds keep DEBUG
         // lines out of the log file. describePayload never prints
-        // string contents, so nothing sensitive rides along.
+        // string contents, so nothing sensitive rides along. (Runs
+        // after the emit decision so suppressed duplicates never
+        // pollute the crash ring; still synchronous within trigger.)
         logManager?.breadcrumb(
             "Triggered '${key.eventName}'${describePayload(payload)}",
         )
-        // Emit under flowsLock (reentrant with flowFor's own hold) so a
-        // trigger racing resetSessionReplayCaches cannot land a
-        // pre-reset payload in a just-cleared replay cache. tryEmit
-        // never blocks under DROP_OLDEST, so the hold stays trivial.
-        synchronized(flowsLock) {
-            flowFor(key).tryEmit(payload)
-        }
     }
 
     private fun subscribe(

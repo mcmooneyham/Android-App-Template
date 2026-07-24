@@ -248,6 +248,11 @@ The contract every publisher and subscriber can rely on:
 - Publish-time validation: a payload whose runtime type contradicts
   the key is rejected and logged, never delivered (a backstop for the
   type-erased paths; typed paths do not compile when wrong).
+- Unchanged state is not re-delivered: triggering a state key with a
+  payload equal to the cached value is suppressed (subscribers
+  already hold the current value; signals always deliver). Publishers
+  therefore need no hand-rolled dedupe, and re-publishing state to
+  "nudge" listeners does not work by design.
 - Owner lifecycle: `listenTo(key, owner) { ... }` runs the callback
   WITH THE OWNER AS RECEIVER while the bus holds the owner weakly.
   Reach the owner only through the receiver (pass lambda literals;

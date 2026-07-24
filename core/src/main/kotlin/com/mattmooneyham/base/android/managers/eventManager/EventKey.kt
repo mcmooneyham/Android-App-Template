@@ -64,7 +64,10 @@ abstract class AnyEventKey(
  *
  * Delivery semantics: state keys always replay. The most recent payload
  * is cached and delivered to late subscribers, latest-wins under
- * bursts; never use events as lossless data queues. For one-shot
+ * bursts; never use events as lossless data queues. Triggering an
+ * UNCHANGED payload (equal to the cached value) is suppressed, so
+ * publishers need no hand-rolled dedupe; keep payloads immutable data
+ * classes so that equality stays meaningful. For one-shot
  * notifications with no cached value, declare a [SignalKey] instead.
  *
  * [lifetime] defaults to [EventLifetime.SESSION]: the cached replay

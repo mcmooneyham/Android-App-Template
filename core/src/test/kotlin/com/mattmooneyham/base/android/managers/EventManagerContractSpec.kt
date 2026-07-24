@@ -126,6 +126,67 @@ class EventManagerContractSpec {
     }
 
     @Test
+    fun `an unchanged state payload is suppressed, a change delivers`() {
+        val receivedPayloads = mutableListOf<String>()
+        val listenerOwner = Any()
+        eventManager.listenTo(TestGreetingChanged, listenerOwner) {
+            receivedPayloads += it
+        }
+
+        eventManager.trigger(TestGreetingChanged, "same")
+        // Equal to the cached value: carries no information, so it
+        // is not delivered (subscribers already hold it).
+        eventManager.trigger(TestGreetingChanged, "same")
+        eventManager.trigger(TestGreetingChanged, "changed")
+        // "same" again is a CHANGE relative to the current cache,
+        // so it delivers: only immediate duplicates are suppressed.
+        eventManager.trigger(TestGreetingChanged, "same")
+
+        assertEquals(
+            listOf("same", "changed", "same"),
+            receivedPayloads,
+        )
+        Reference.reachabilityFence(listenerOwner)
+    }
+
+    @Test
+    fun `identical signals always deliver, signals never dedupe`() {
+        var signalCount = 0
+        val listenerOwner = Any()
+        eventManager.listenTo(TestPingFired, listenerOwner) {
+            signalCount += 1
+        }
+
+        eventManager.trigger(TestPingFired)
+        eventManager.trigger(TestPingFired)
+
+        // Firing twice means two facts; suppression would lose one.
+        assertEquals(2, signalCount)
+        Reference.reachabilityFence(listenerOwner)
+    }
+
+    @Test
+    fun `a session reset re-opens delivery of the same state value`() {
+        val receivedPayloads = mutableListOf<String>()
+        val listenerOwner = Any()
+        eventManager.listenTo(TestGreetingChanged, listenerOwner) {
+            receivedPayloads += it
+        }
+        eventManager.trigger(TestGreetingChanged, "user value")
+
+        eventManager.resetSessionReplayCaches()
+        // The cache is empty after the reset, so the same value is a
+        // legitimate new fact for the next session and must deliver.
+        eventManager.trigger(TestGreetingChanged, "user value")
+
+        assertEquals(
+            listOf("user value", "user value"),
+            receivedPayloads,
+        )
+        Reference.reachabilityFence(listenerOwner)
+    }
+
+    @Test
     fun `session reset clears session caches and keeps app caches`() {
         eventManager.trigger(TestGreetingChanged, "user data")
         eventManager.trigger(TestCounterChanged, 7)
