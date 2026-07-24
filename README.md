@@ -184,8 +184,8 @@ flowchart TD
 - `:app` is the shell: the composition root, the Android adapters,
   the `Application`, and the single `Activity`.
 - `:templates` is living documentation: fully commented example files
-  that compile and test on every build but ship in nothing. Start a
-  new feature by copying one; see
+  that compile and test on every CI run (and any root build) but ship
+  in nothing. Start a new feature by copying one; see
   [templates/README.md](templates/README.md).
 
 Rule of thumb: if a file needs `android.*`, it belongs in `:app` or
@@ -220,12 +220,12 @@ point at which each becomes worth doing.
 ## Notable features
 
 - **Retry utility** (`util/Retry.kt`): one small policy type and two
-  functions. `retry` handles one-shot work with bounded attempts and
-  capped exponential backoff, rethrowing cancellation and permanent
-  failures immediately. `retryForever` keeps long-lived stream
-  bridges alive, resetting the backoff each time the stream emits
-  successfully. The DataStore bridges ride it, so one bad read costs
-  a short delay instead of the feature.
+  functions. `retry` handles one-shot work with bounded attempts,
+  capped exponential backoff, and optional jitter, rethrowing
+  cancellation and permanent failures immediately. `retryForever`
+  keeps long-lived stream bridges alive, resetting the backoff each
+  time the stream emits successfully. The DataStore bridges ride it,
+  so one bad read costs a short delay instead of the feature.
 
   ```kotlin
   // One-shot work: 3 attempts by default, backoff doubling from
@@ -295,11 +295,14 @@ DataStore 1.2.1, kotlinx-serialization.
 
 ```
 ./gradlew :app:assembleDebug
-./gradlew :core:test :ui:testDebugUnitTest :app:testDebugUnitTest
+./gradlew :core:test :ui:testDebugUnitTest :app:testDebugUnitTest \
+    :templates:testDebugUnitTest
 ./gradlew :app:connectedDebugAndroidTest    # real device or emulator
 ```
 
-The repo is self-contained; no external checkouts required.
+The same gate (plus the R8 release build and lint) runs on every
+push via GitHub Actions: see `.github/workflows/ci.yml`. The repo is
+self-contained; no external checkouts required.
 
 ## Digging deeper
 

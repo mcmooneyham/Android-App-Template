@@ -130,12 +130,18 @@ declared today:
 
 - `JokeStateChanged`: `StateKey<JokeState>`, `"joke.StateChanged"`,
   SESSION lifetime, declared beside `JokeManager`.
+- `JokeDetailChanged`: `StateKey<JokeDetailState>`,
+  `"joke.DetailChanged"`, SESSION lifetime, beside `JokeManager`: the
+  keyed list-to-detail exemplar (the payload carries the REQUESTED
+  id, so screens render only their own id).
 - `NetworkConnectivityChanged`: `StateKey<Boolean>`,
   `"network.ConnectivityChanged"`, APP lifetime (connectivity is a
   device fact, not user state), beside `ConnectivityManager`.
 - `HasSeenWelcomeChanged`: `StateKey<Boolean>`,
-  `"datastore.HasSeenWelcomeChanged"`, SESSION lifetime, beside
-  `DataStoreManager`.
+  `"datastore.HasSeenWelcomeChanged"`, APP lifetime (the preference
+  file is device-persistent and its bridge re-publishes only on value
+  changes, so a SESSION key would go dark after a session reset),
+  beside `DataStoreManager`.
 - `LogsCleared`: `SignalKey`, `"log.Cleared"`, beside `LogManager`.
 - `FeatureFlagsChanged`: `StateKey<FlagSnapshot>`, `"flags.Changed"`,
   APP lifetime, beside `FeatureFlagManager`.
@@ -168,12 +174,15 @@ The contract every publisher and subscriber can rely on:
   PRIMARY contract: ViewModels call `unsubscribeOwner` in onCleared,
   sessions in their teardown, and managers simply rely on the bus
   dying with the component; auto-removal is the safety net.
-- Ordering (the five rules, from the `EventManager` KDoc): delivery
+- Ordering (the six rules, from the `EventManager` KDoc): delivery
   order ACROSS keys is unspecified; per-key delivery is in trigger
   order; UI listeners always run on the main dispatcher; a listener
   never observes a replay older than the latest trigger; triggers are
   synchronous, callable from any thread, and never block (overflow
-  drops the OLDEST buffered event, latest wins).
+  drops the OLDEST buffered event, latest wins); and a SIGNAL
+  subscription is live before `listenTo` returns, so a signal fired
+  on the caller's next line is delivered (state subscriptions may
+  attach asynchronously; replay makes that harmless).
 - A listener that throws is logged loudly and KEPT ALIVE; one bad
   payload must not silently kill a screen's subscription.
 - Every trigger passes one breadcrumb choke point: it always reaches
@@ -208,11 +217,13 @@ concurrency rails (`managers/ConfinedManager.kt`):
 
 Transient failures retry through `util/Retry.kt`: `RetryPolicy` plus
 `retry` (one-shot operations: bounded attempts, capped exponential
-backoff, cancellation and permanent failures rethrow immediately) and
+backoff with optional jitter for stampede-prone retriers,
+cancellation and permanent failures rethrow immediately) and
 `retryForever` (long-lived stream bridges: the block's `onHealthy`
-hook resets the backoff on each successful emission). Both DataStore
-bus bridges ride `retryForever`, so one bad read costs a delay, not
-the feature. Work that must survive process death is NOT retry
+hook resets the backoff on each successful emission; both share one
+`bridgeRetryReporter`, ERROR on an outage's first failure, WARN on
+repeats). Both DataStore bus bridges ride `retryForever`, so one bad
+read costs a delay, not the feature. Work that must survive process death is NOT retry
 material; it belongs to the durable job pipeline
 (ARCHITECTURE-SCALING.md).
 
@@ -238,10 +249,18 @@ needs to react to another manager's events.
 - `ConnectivityMonitor` (in `:core`) isolates the platform's
   connectivity machinery; `AndroidConnectivityMonitor` (in
   `:app/platform`) is the real adapter, tests inject a fake and drive
-  changes by hand. `PlatformLogWriter` is the same shape for the
+  changes by hand. The port's contract: the FIRST report, delivered
+  during start, is the device's real current state (never an assumed
+  default), so a boot while online can never masquerade as a
+  reconnect edge. `PlatformLogWriter` is the same shape for the
   Logcat mirror (`AndroidLogWriter`); JVM tests keep its no-op
   default. Ports live in `:core`, where the missing Android classpath
   makes the isolation structural.
+- The shared HTTP client configures explicit timeouts (a 30 s overall
+  call budget plus 10 s connect/socket caps in `HttpClientFactory`),
+  so even a trickling response terminates and surfaces as
+  `FailureKind.TIMEOUT`; engine defaults alone would let a slow body
+  hold in-flight state forever.
 - `Clock` (from `kotlin.time`) is injected via `AppConfig` wherever
   wall time is read (log timestamps), so tests can pin time.
 - `BuildInfo` (versionName, build stamp, isDebugBuild) is constructed
@@ -264,7 +283,7 @@ needs to react to another manager's events.
   later), and `flushForCrash()` keeps the unbounded drain for a dying
   process. Failed file writes report through Logcat, one non-fatal
   per process, and an honest marker line in the log itself. The log
-  file rotates by size (`base-app.log` becomes `base-app.1.log` at
+  file rotates by size (`base_app.log` becomes `base_app.1.log` at
   the `AppConfig` cap; one rotated file is kept), and
   `writeExportSnapshot()` copies rotated-plus-live into an export
   file that Settings shares as a FileProvider URI stream (never
@@ -341,21 +360,36 @@ ARCHITECTURE-SCALING.md):
 - `animations/AppAnimations.kt`: ALL motion definitions live here.
 - `constants/`: `BrandColors` semantic tokens (`LogLevel` lives in
   `:core`'s constants package).
+- Localization: user-facing copy lives in string resources (`:ui`'s
+  and `:templates`' `res/values/strings.xml`), read via
+  `stringResource`; adding a language is a `values-xx` folder, not a
+  refactor, and the instrumented flow tests resolve their matchers
+  through the same resources.
+- Keep-alive tabs, a deliberate cost: every tab stays composed
+  (hidden ones drawn at alpha 0) so screen state and scroll positions
+  survive tab switches. Hidden tabs therefore keep their bus
+  subscriptions collecting; that stays cheap because state keys are
+  low-traffic replayed projections, and loading animations leave the
+  composition once content settles. Revisit alongside the Navigation
+  3 threshold if a tab ever hosts high-rate collections.
 
 ## The demo feature
 
 `JokeManager` shows how to add a feature: declare the service's base
 URL beside the manager and wrap the shared `httpClient` in the
 manager's own `ApiClient`, subscribe in init but fetch in `start()`
-(the init budget), publish ONE state event (`JokeStateChanged`, a
+(the init budget), publish a state event (`JokeStateChanged`, a
 `StateKey<JokeState>` declared beside the manager) whose payload
-carries the whole story (REFRESHING, then SUCCESS or FAILED,
+carries the card's whole story (REFRESHING, then SUCCESS or FAILED,
 retaining the last good joke), let views listen, and let the
 viewmodel forward user actions. The pushed `JokeDetailPage` shows the
-navigation half: a typed destination with an argument, reached only
-through the router, rendered from bus state. Copy those shapes for
-real features; each new service gets its own per-endpoint `ApiClient`
-on the same shared engine.
+KEYED list-to-detail half: the screen asks the manager to ensure its
+id is loaded (`loadJokeDetail`; a cache hit answers instantly,
+anything else fetches by id) and renders only `JokeDetailChanged`
+states carrying that id, which is what makes a cold-start deep link
+to any id work. Copy those shapes for real features; each new
+service gets its own per-endpoint `ApiClient` on the same shared
+engine.
 
 ## Tests
 
@@ -383,7 +417,11 @@ spec, `:app` holds the component-level specs and the guards, and
   `expectEvent`/`expectState`, `assertOrder`, `assertNoEvent`.
 - Suites: `EventManagerContractSpec` (validation, replay vs signal,
   dedupe of unchanged state, session reset, `unsubscribeOwner`, both
-  sides of the weak-owner contract), `JokeManagerLifecycleSpec`,
+  sides of the weak-owner contract, the live-before-return signal
+  subscription, and DROP_OLDEST overflow's contiguous-suffix
+  behavior), `JokeManagerLifecycleSpec` (fetch lifecycle, in-flight
+  guard, failure taxonomy incl. TIMEOUT and DECODE, the keyed detail
+  pattern),
   `DataStoreManagerSpec` (including bridge resubscription after a
   read failure), `JokeConnectivityChoreographySpec` (the reconnect
   auto-refresh and its flag gate), `FeatureFlagManagerSpec` (layer
@@ -394,17 +432,21 @@ spec, `:app` holds the component-level specs and the guards, and
   retry-utility contract), `AppRouterSpec` (back semantics, deep
   links, corrupt restore), `MainViewModelSpec`,
   `SettingsViewModelSpec` (including the export snapshot's flush and
-  rotated-history guarantees), plus the guards:
-  `CompositionRootGuardTest` (no global container or library-kit
-  terminology), `FeatureFlagRegistryGuardTest` (every declared flag
-  is registered), `WiringConventionsGuardTest` (single-publisher;
-  AppModule mirrors the component's managers), and the init-budget
-  fence in `TestAppContextSpec` (construction performs zero network
-  IO).
+  rotated-history guarantees), `ConnectivityManagerSpec` (duplicate
+  platform reports publish once; a boot while online is never a
+  reconnect edge), plus the guards:
+  `FeatureFlagRegistryGuardTest` (every declared flag is registered),
+  `WiringConventionsGuardTest` (single-publisher; AppModule mirrors
+  the component's managers; destinations are data types), and the
+  init-budget fence in `TestAppContextSpec` (construction performs
+  zero network IO).
 
 Instrumented flow tests drive the REAL app on a connected device or
 emulator (real Hilt graph, real managers, real DataStore; no mocks
-anywhere):
+anywhere). That honesty has a stated cost: the joke flows exercise
+the real third-party API, so the tests that require a served joke or
+a validated network SELF-SKIP (JUnit assumptions) instead of failing
+when either is unavailable:
 
 ```
 ./gradlew :app:connectedDebugAndroidTest

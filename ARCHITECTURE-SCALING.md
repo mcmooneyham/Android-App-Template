@@ -260,7 +260,7 @@ Three mechanisms, in adoption order:
    bus. `trigger` becomes internal to the core module at the module
    split; listeners are unaffected.
 2. KONSIST RULES (a JVM test, like the shipped
-   `CompositionRootGuardTest`): every key object is declared in the
+   `WiringConventionsGuardTest`): every key object is declared in the
    same file as its publishing manager; every `eventName` matches
    `^[a-z]+\.[A-Z][A-Za-z]*$` and its namespace matches the manager;
    every `StateKey` payload is an immutable data class; no `var`

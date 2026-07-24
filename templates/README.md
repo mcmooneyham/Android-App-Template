@@ -2,8 +2,9 @@
 
 Fully-commented exemplar files showing how to build each kind of
 component this codebase uses. They COMPILE against `:core` and `:ui`
-on every build and `TemplateManagerSpec` runs green in CI, so unlike
-a docs folder they can never rot; but no module depends on
+and `TemplateManagerSpec` runs green on every CI run (and in any root
+`./gradlew build`; module-scoped app builds skip them), so unlike a
+docs folder they can never rot; but no module depends on
 `:templates`, so they ship in nothing.
 
 ## How to use a template
