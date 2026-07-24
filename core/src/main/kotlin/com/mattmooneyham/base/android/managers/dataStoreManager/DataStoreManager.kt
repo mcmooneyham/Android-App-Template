@@ -25,8 +25,8 @@ object HasSeenWelcomeChanged : StateKey<Boolean>(
 /**
  * Typed facade over the shared Preferences DataStore. Each preference is a
  * [Flow] property paired with a suspend setter; add project preferences by
- * following the same pattern. Provided as a singleton via
- * [com.mattmooneyham.base.android.di.AppComponent].
+ * following the same pattern. Provided as a singleton via AppComponent
+ * (in :app).
  *
  * Event-driven contract: every preference is streamed through
  * [EventManager], so listeners receive the stored value on startup and

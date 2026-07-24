@@ -39,7 +39,7 @@ private object TestCounterChanged : StateKey<Int>(
 private object TestPingFired : SignalKey(eventName = "test.PingFired")
 
 /**
- * Contract tests for the event bus itself, on a bare [com.mattmooneyham.base.android.managers.eventManager.EventManager]
+ * Contract tests for the event bus itself, on a bare [EventManager]
  * (no LogManager attached; tracing is optional by design). Main is an
  * unconfined test dispatcher, so listener delivery happens
  * synchronously within each trigger call and the assertions below can

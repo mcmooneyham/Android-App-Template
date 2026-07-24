@@ -4,8 +4,10 @@ import java.io.File
 
 // Shared source-tree access for the source-scanning guard tests,
 // which span all three modules (:core, :ui, :app) since the layer
-// split. One definition, so the guards can never disagree about what
-// counts as a source root or how comments are stripped.
+// split. One definition for the main-kotlin scans, so those guards
+// cannot drift apart; CompositionRootGuardTest deliberately scans a
+// WIDER tree of its own (androidTest plus kts/xml/pro/md files, raw
+// text because comments are in scope there).
 
 internal val GUARDED_MODULES = listOf("core", "ui", "app")
 

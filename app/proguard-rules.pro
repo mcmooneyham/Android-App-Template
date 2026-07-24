@@ -1,3 +1,4 @@
 # Add project specific ProGuard rules here.
-# By default, the flags in this file are appended to flags specified
-# in the Android SDK's tools/proguard/proguard-android-optimize.txt.
+# These flags are appended to AGP's bundled
+# proguard-android-optimize.txt, selected via getDefaultProguardFile
+# in app/build.gradle.kts.

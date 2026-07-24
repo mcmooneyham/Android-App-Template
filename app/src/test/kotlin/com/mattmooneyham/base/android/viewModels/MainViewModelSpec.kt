@@ -57,7 +57,7 @@ class MainViewModelSpec {
             val app = startApp()
             val viewModel = buildViewModel(app)
             val recorder = app.newRecorder().record(JokeStateChanged)
-            // Drain the construction-time fetch first.
+            // Drain the startup fetch first.
             recorder.expectStateMatching(JokeStateChanged) { state ->
                 state.status == JokeStatus.SUCCESS
             }

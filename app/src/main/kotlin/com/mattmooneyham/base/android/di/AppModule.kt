@@ -9,7 +9,7 @@ import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagManager
 import com.mattmooneyham.base.android.managers.JokeManager
 import com.mattmooneyham.base.android.managers.logManager.LogManager
-import com.mattmooneyham.base.android.managers.connectivityManager.NetworkManager
+import com.mattmooneyham.base.android.managers.connectivityManager.ConnectivityManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -17,9 +17,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 
 /**
- * Thin Hilt adapter over the manual composition root: every provider
- * reads a member FROM the single [AppComponent] that [BaseApplication]
- * constructs in onCreate, before any injection resolves. No scoping is
+ * Thin Hilt adapter over the manual composition root: every MANAGER
+ * provider reads a member FROM the single [AppComponent] that
+ * [BaseApplication] constructs in onCreate, before any injection
+ * resolves (plain build metadata like BuildInfo is constructed in
+ * place; it is not a component member). No scoping is
  * needed; the component already holds single instances, and Hilt never
  * constructs a manager itself.
  */
@@ -42,8 +44,9 @@ object AppModule {
         component.logManager
 
     @Provides
-    fun provideNetworkManager(component: AppComponent): NetworkManager =
-        component.networkManager
+    fun provideConnectivityManager(
+        component: AppComponent,
+    ): ConnectivityManager = component.connectivityManager
 
     @Provides
     fun provideDataStoreManager(

@@ -63,7 +63,7 @@ data class JokeState(
  * (both keeping the last good joke available).
  *
  * CHOREOGRAPHY EXEMPLAR: this manager also demonstrates the canonical
- * cross-manager pattern by listening to [com.mattmooneyham.base.android.managers.connectivityManager.NetworkConnectivityChanged].
+ * cross-manager pattern by listening to [NetworkConnectivityChanged].
  * When [JokeAutoRetryOnReconnectFlag] is enabled (off by default), the
  * last fetch FAILED, and connectivity transitions from false to true,
  * it auto-refreshes exactly once per failure. The pattern:

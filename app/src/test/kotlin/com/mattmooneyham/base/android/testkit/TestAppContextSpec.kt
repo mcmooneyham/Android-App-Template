@@ -32,15 +32,16 @@ class TestAppContextSpec {
         runBlocking<Unit> {
             val app = startApp()
 
-            // The construction-time joke fetch hit the mock engine
-            // (never the network) and completed the real lifecycle.
+            // The startup joke fetch (run by autoStart's start())
+            // hit the mock engine, never the network, and completed
+            // the real lifecycle.
             val recorder = app.newRecorder().record(JokeStateChanged)
             recorder.expectStateMatching(JokeStateChanged) { state ->
                 state.status == JokeStatus.SUCCESS
             }
             assertEquals(1, jokeApi.requestCount)
 
-            // The connectivity boundary was started by NetworkManager.
+            // The connectivity boundary was started by ConnectivityManager.
             assertTrue(app.connectivityMonitor.isStarted)
 
             // Log lines land inside the per-test directory, stamped by
@@ -86,5 +87,23 @@ class TestAppContextSpec {
         awaitTrue("the first fetch happens on start") {
             jokeApi.requestCount == 1
         }
+    }
+
+    @Test
+    fun `start is idempotent, so managers see at most one start`() {
+        // The component is injectable everywhere, so the at-most-once
+        // start() contract must be a guarantee, not a caller courtesy.
+        val app = startApp()
+        awaitTrue("the startup fetch lands") {
+            jokeApi.requestCount == 1
+        }
+
+        app.component.start()
+        app.component.start()
+
+        // A second start() would launch a second fetch; give the
+        // pipeline real time to prove it never arrives.
+        Thread.sleep(200)
+        assertEquals(1, jokeApi.requestCount)
     }
 }

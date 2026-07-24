@@ -47,8 +47,8 @@ private val OVERRIDE_CHOICES: List<Pair<String, Boolean?>> = listOf(
 /**
  * Body of the Settings > Debug > Feature flags modal sheet: a header
  * plus every declared flag in the app's grouped-card style. Each row
- * shows the flag's live resolved state (the same status pill the
- * HeroCard uses), which layer decided it, and a brand-tinted tri-state
+ * shows the flag's live resolved state (the shared StatusChip pill),
+ * which layer decided it, and a brand-tinted tri-state
  * override control; "Default" clears the local override so the
  * provider or compiled value decides again.
  *

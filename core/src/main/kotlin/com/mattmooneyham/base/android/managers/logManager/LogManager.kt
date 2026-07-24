@@ -58,8 +58,10 @@ class LoggedError internal constructor(
  * ```
  *
  * i.e. UTC timestamp, level, thread, call site (class, method, file,
- * line), tag, and message. Lines go to Logcat and, once a directory is
- * configured, to a log file. Logging never throws: failures are
+ * line), tag, and message. Lines go to the platform log mirror (the
+ * PlatformLogWriter port: Logcat when :app wires AndroidLogWriter, a
+ * no-op by default) and, when file logging is enabled and a directory
+ * is configured, to a log file. Logging never throws: failures are
  * swallowed so a logging problem can't take the app down.
  *
  * The short call style is the intended one: `logManager.info("message")`.
@@ -92,8 +94,7 @@ class LoggedError internal constructor(
  * previous rotation), and a fresh file starts. At most one rotated
  * file is kept, capping total disk use at roughly twice the limit.
  *
- * Provided as a singleton via
- * [com.mattmooneyham.base.android.di.AppComponent].
+ * Provided as a singleton via AppComponent (in :app).
  *
  * @param fileSettings file-side policy (directory, name, rotation
  *   cap, on/off switch), grouped so the wiring stays within budget.
@@ -391,10 +392,11 @@ class LogManager(
      * Steals queued commands from the channel and executes them
      * synchronously, up to [maxCommandCount]. Racing the background
      * writer is safe: the channel delivers each command to exactly
-     * one consumer and file access is locked. Internal so the spec
-     * can pin the bound directly.
+     * one consumer and file access is locked. The bound is covered
+     * behaviorally: LogManagerReportingSpec's burst test proves an
+     * ERROR call stalls nothing and loses nothing.
      */
-    internal fun drainPendingFileCommands(
+    private fun drainPendingFileCommands(
         maxCommandCount: Int = Int.MAX_VALUE,
     ) {
         runCatching {
@@ -411,7 +413,8 @@ class LogManager(
     /**
      * Stops the file writer for good. Buffered lines may be dropped;
      * callers that need them persisted (tests, export flows) should
-     * [flush] first. A closed manager still writes to Logcat, never to
+     * [flush] first. A closed manager still writes to the platform
+     * mirror, never to
      * the file. Called by the AppComponent's close().
      */
     override fun close() {
@@ -556,7 +559,7 @@ class LogManager(
 
     /**
      * A failed file write reports through the channels that still
-     * work: Logcat immediately, and the crash backend ONCE per
+     * work: the platform mirror immediately, and the crash backend ONCE per
      * process (a full disk fails every append; one non-fatal is
      * signal). The running count becomes an honest marker line on
      * the next successful append (see [executeFileCommand]), so an
@@ -657,7 +660,7 @@ class LogManager(
         // common near-empty queue, small enough that a full
         // 512-command queue can never stall the calling thread into
         // an ANR. flushForCrash keeps the unbounded drain.
-        internal const val ERROR_DRAIN_COMMAND_LIMIT = 64
+        private const val ERROR_DRAIN_COMMAND_LIMIT = 64
 
         // Fixed widths keep the pipe-separated columns aligned
         // across lines, so the file scans like a table.

@@ -32,7 +32,7 @@ import org.junit.Test
  * DataStoreManager against the REAL Preferences DataStore, backed by
  * the harness's per-test temporary directory: writes round-trip
  * through the actual store file and every value change reaches the
- * bus as a [com.mattmooneyham.base.android.managers.dataStoreManager.HasSeenWelcomeChanged] event.
+ * bus as a [HasSeenWelcomeChanged] event.
  */
 class DataStoreManagerSpec {
 

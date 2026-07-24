@@ -11,7 +11,7 @@ import com.mattmooneyham.base.android.managers.JokeManager
 import com.mattmooneyham.base.android.managers.logManager.LogFileSettings
 import com.mattmooneyham.base.android.managers.logManager.LogManager
 import com.mattmooneyham.base.android.managers.logManager.LogSinks
-import com.mattmooneyham.base.android.managers.connectivityManager.NetworkManager
+import com.mattmooneyham.base.android.managers.connectivityManager.ConnectivityManager
 import com.mattmooneyham.base.android.managers.dataStoreManager.createDataStoreScope
 import com.mattmooneyham.base.android.managers.dataStoreManager.createPreferencesDataStore
 import io.ktor.client.HttpClient
@@ -39,7 +39,10 @@ import kotlinx.serialization.json.Json
  * - Every member registers its own teardown BESIDE its declaration
  *   ([closedBy] for plain resources, [registered] for managers), so
  *   close-mirrors-construction is true by construction and [close] is
- *   never edited by feature PRs.
+ *   never edited by feature PRs. The ONE hand-maintained exception is
+ *   the crash-handler restore at the top of [close]: it must run
+ *   before every teardown step and only when our handler is still
+ *   installed, which the registry cannot express.
  * - Feature managers are APPENDED at the end of their marked region;
  *   they may depend on the infrastructure tier (bus, logging, flags,
  *   httpClient) but never on each other: cross-feature conversation
@@ -56,7 +59,8 @@ class AppComponent(config: AppConfig) {
     // Teardown steps in REVERSE construction order: each member
     // records its own step beside its declaration via closedBy or
     // registered, and addFirst keeps the list mirrored for free.
-    // close() walks it; no hand-maintained ordering exists.
+    // close() walks it; the only hand-ordered step is the
+    // crash-handler restore, which precedes the walk (see close).
     private val teardownSteps = ArrayDeque<() -> Unit>()
 
     /** Registers the teardown for a non-manager resource (a scope,
@@ -71,6 +75,10 @@ class AppComponent(config: AppConfig) {
     // Managers in construction order, walked by start().
     private val managersInConstructionOrder =
         mutableListOf<ConfinedManager>()
+
+    // Makes start() idempotent, so "managers see at most one start()"
+    // is a guarantee rather than a caller convention.
+    private var hasStarted = false
 
     /** Registers a manager's start order AND teardown at once. */
     private fun <ManagerType : ConfinedManager>
@@ -107,7 +115,7 @@ class AppComponent(config: AppConfig) {
         eventManager.attachLogManager(logManager)
     }
 
-    val networkManager = NetworkManager(
+    val connectivityManager = ConnectivityManager(
         logManager = logManager,
         eventManager = eventManager,
         // The boundary seam: BaseApplication passes the real Android
@@ -226,10 +234,13 @@ class AppComponent(config: AppConfig) {
      * this immediately after construction today; when a measured
      * cold start attributes real cost here, this single call is what
      * moves behind the first frame, and the lazy-tier plan in
-     * ARCHITECTURE-SCALING.md tiers it further. Managers see at most
-     * one start() per component.
+     * ARCHITECTURE-SCALING.md tiers it further. Idempotent: repeated
+     * calls are no-ops, so managers genuinely see at most one
+     * start() per component however many callers reach it.
      */
     fun start() {
+        if (hasStarted) return
+        hasStarted = true
         managersInConstructionOrder.forEach { manager ->
             manager.start()
         }
@@ -238,7 +249,8 @@ class AppComponent(config: AppConfig) {
     /**
      * Tears the component down in REVERSE construction order by
      * walking the self-registered [teardownSteps]; the mirror is
-     * structural, never hand-maintained. The event-bus scope is
+     * structural (only the crash-handler restore below is
+     * hand-ordered). The event-bus scope is
      * cancelled LAST, so events triggered by earlier teardown steps
      * can still deliver. A closed component cannot be reused;
      * construct a new one (which tests do per test).

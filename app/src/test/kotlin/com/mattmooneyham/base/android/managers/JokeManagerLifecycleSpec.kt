@@ -88,7 +88,7 @@ class JokeManagerLifecycleSpec {
         runBlocking<Unit> {
             val app = startApp()
             val recorder = app.newRecorder().record(JokeStateChanged)
-            // Drain the construction-time fetch (default: success).
+            // Drain the startup fetch (default: success).
             recorder.expectStateMatching(JokeStateChanged) { state ->
                 state.status == JokeStatus.SUCCESS
             }

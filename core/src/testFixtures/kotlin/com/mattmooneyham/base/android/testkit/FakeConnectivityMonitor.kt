@@ -3,13 +3,13 @@ package com.mattmooneyham.base.android.testkit
 import com.mattmooneyham.base.android.managers.connectivityManager.ConnectivityMonitor
 
 /**
- * Test double for the connectivity boundary. NetworkManager starts it
- * during component construction; tests then drive connectivity changes
- * deterministically with [setConnected].
+ * Test double for the connectivity boundary. ConnectivityManager
+ * starts it during component construction; tests then drive
+ * connectivity changes deterministically with [setConnected].
  *
  * The callback is invoked on the CALLER's thread, mirroring the real
  * monitor's "possibly from a background thread" contract;
- * NetworkManager hops onto its own confinement either way, so
+ * ConnectivityManager hops onto its own confinement either way, so
  * connectivity-driven assertions must await events rather than assume
  * synchronous publication.
  */
@@ -18,7 +18,8 @@ class FakeConnectivityMonitor : ConnectivityMonitor {
     @Volatile
     private var onConnectivityChanged: ((Boolean) -> Unit)? = null
 
-    /** Whether [stop] has been called (by NetworkManager.close()). */
+    /** Whether [stop] has been called (by
+     * ConnectivityManager.close()). */
     @Volatile
     var isStopped: Boolean = false
         private set

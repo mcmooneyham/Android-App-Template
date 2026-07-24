@@ -12,7 +12,10 @@ import kotlinx.coroutines.launch
 
 // State: whether the device has a usable, validated network path.
 // APP lifetime: connectivity is a device fact, not user state, so its
-// cached value survives resetSessionReplayCaches on logout.
+// cached value survives resetSessionReplayCaches on logout. The key
+// name and eventName predate the manager's rename from NetworkManager
+// and stay unchanged: eventName is a wire/log contract (payload
+// evolution rule 5), and the object name follows it.
 object NetworkConnectivityChanged : StateKey<Boolean>(
     eventName = "network.ConnectivityChanged",
     payloadType = Boolean::class,
@@ -22,19 +25,23 @@ object NetworkConnectivityChanged : StateKey<Boolean>(
 /**
  * Owns connectivity state for the app: state, events, and logging. The
  * platform hookup lives behind the injected [ConnectivityMonitor]
- * boundary (see AndroidConnectivityMonitor for the real one; tests
- * inject a fake and drive changes by hand).
+ * boundary (AndroidConnectivityMonitor in :app's platform package is
+ * the real one; tests inject a fake and drive changes by hand).
  *
- * Provided as a singleton via
- * [com.mattmooneyham.base.android.di.AppComponent]; monitoring starts
- * on construction.
+ * The name deliberately matches android.net.ConnectivityManager: this
+ * module has no Android classpath, so the two can never collide here,
+ * and the one file that touches both (the :app adapter) imports the
+ * platform type explicitly.
+ *
+ * Provided as a singleton via AppComponent (in :app); monitoring
+ * starts on construction.
  */
-class NetworkManager(
+class ConnectivityManager(
     private val logManager: LogManager,
     private val eventManager: EventManager,
     private val connectivityMonitor: ConnectivityMonitor,
 ) : ConfinedManager(
-    managerName = "NetworkManager",
+    managerName = "ConnectivityManager",
     failureLogManager = logManager,
 ) {
 

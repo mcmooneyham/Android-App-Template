@@ -13,7 +13,7 @@ import org.junit.Test
 
 /**
  * Specification of the R5 choreography exemplar: JokeManager listens
- * to [com.mattmooneyham.base.android.managers.connectivityManager.NetworkConnectivityChanged] and, when the LAST fetch failed and
+ * to NetworkConnectivityChanged and, when the LAST fetch failed and
  * connectivity transitions from false to true, auto-refreshes exactly
  * once per failure. The whole conversation happens via published
  * events, driven end to end through the fake connectivity boundary.
@@ -59,8 +59,8 @@ class JokeConnectivityChoreographySpec {
     @Test
     fun `after a failure, a connectivity flap refreshes exactly once`() =
         runBlocking<Unit> {
-            // The construction-time fetch fails; the reply queue then
-            // falls back to success for the automatic retry.
+            // The startup fetch (start()) fails; the reply queue
+            // then falls back to success for the automatic retry.
             jokeApi.enqueueConnectionFailure()
             val app = startApp()
             val recorder = app.newRecorder()

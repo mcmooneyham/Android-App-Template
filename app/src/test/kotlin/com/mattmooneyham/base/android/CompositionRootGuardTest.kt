@@ -89,8 +89,10 @@ class CompositionRootGuardTest {
         )
     }
 
-    /** Shipped source sets across all modules, minus test sets
-     * (which hold these guards). */
+    /** The guarded source sets: every module's main set plus the
+     * instrumented tests (shipped-adjacent, and not where the guards
+     * live). Only the JVM unit-test sets, which hold the guards
+     * themselves, are excluded. */
     private fun guardedSourceRoots(): List<File> =
         GUARDED_SOURCE_SETS
             .map { sourceSetPath ->
@@ -120,8 +122,9 @@ class CompositionRootGuardTest {
             "sdk.dir",
         )
 
-        // Test source sets are deliberately absent: they hold the
-        // guards themselves.
+        // The JVM unit-test sets are deliberately absent (they hold
+        // the guards themselves); androidTest IS scanned, since flow
+        // tests ship conventions worth guarding too.
         val GUARDED_SOURCE_SETS = listOf(
             "core/src/main",
             "ui/src/main",

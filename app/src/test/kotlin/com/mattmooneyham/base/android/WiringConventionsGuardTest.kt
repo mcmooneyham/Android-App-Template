@@ -6,8 +6,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Mechanical enforcement of two composition-root conventions the
- * AppComponent KDoc states in prose, in the same zero-dependency
+ * Mechanical enforcement of two conventions stated in prose (the
+ * single-publisher rule in the EventManager/EventKey KDocs, provider
+ * completeness in the AppModule KDoc), in the same zero-dependency
  * scan-at-test-runtime style as CompositionRootGuardTest:
  *
  * 1. SINGLE PUBLISHER: an event key may be triggered only from the

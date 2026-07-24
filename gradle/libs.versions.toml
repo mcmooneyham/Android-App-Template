@@ -1,5 +1,6 @@
-# Single-module template: the manager/API layer lives inside the app,
-# so all of its dependencies are declared here as well.
+# Shared catalog for the three-module template (:core holds the
+# manager/API layer, :ui the views, :app the composition root), so
+# every module's dependencies are declared here.
 # Tested ceiling for Kotlin 2.4.10: Gradle 9.5.0, AGP 9.1.0.
 [versions]
 androidx-test-runner = "1.6.2"
@@ -28,8 +29,8 @@ kotlinx-serialization = "1.11.0"
 ktor = "3.5.1"
 # Floor set by datastore-preferences-core; used directly for log file IO.
 okio = "3.9.1"
-# JVM unit-test stack (app/src/test), matching the JUnit4 style of the
-# instrumented tests.
+# JVM unit-test stack (core, ui, and app src/test), matching the
+# JUnit4 style of the instrumented tests.
 junit = "4.13.2"
 
 [libraries]

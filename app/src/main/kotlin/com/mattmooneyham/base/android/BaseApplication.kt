@@ -36,7 +36,9 @@ class BaseApplication : Application() {
                 connectivityMonitor = AndroidConnectivityMonitor(this),
                 platformLogWriter = AndroidLogWriter(),
                 // Debug builds log everything; release keeps INFO and
-                // above, so trigger traces vanish from production.
+                // above, so trigger traces vanish from the release log
+                // file and Logcat (crash-report breadcrumbs still
+                // carry every trigger).
                 minimumLogLevel = if (BuildConfig.DEBUG) {
                     LogLevel.DEBUG
                 } else {

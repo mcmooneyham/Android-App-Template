@@ -15,8 +15,10 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.json.Json
 
 /**
- * Scripted stand-in for the Joke API, served through Ktor's MockEngine
- * (wired in by [TestAppContext] through AppConfig.httpClientFactory).
+ * Scripted stand-in for the Joke API, served through Ktor's
+ * MockEngine (wired in by the app-test TestAppContext harness through
+ * AppConfig.httpClientFactory; both live in :app's tests, which this
+ * module cannot link to).
  * No test ever touches the network.
  *
  * Behavior: each request consumes the next enqueued [PlannedReply];
@@ -83,7 +85,8 @@ class FakeJokeApi {
         responseGate?.complete(Unit)
     }
 
-    /** The MockEngine handler; installed by [TestAppContext]. */
+    /** The MockEngine handler; installed by the test harness
+     * (TestAppContext in :app's tests). */
     suspend fun MockRequestHandleScope.serveRequest(
         @Suppress("UNUSED_PARAMETER") request: HttpRequestData,
     ): HttpResponseData {

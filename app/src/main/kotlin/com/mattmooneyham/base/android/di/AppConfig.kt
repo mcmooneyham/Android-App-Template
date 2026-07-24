@@ -34,7 +34,9 @@ import kotlinx.serialization.json.Json
  *   tests inject a fake and drive it by hand.
  * @param minimumLogLevel lowest level that gets logged. The default is
  *   INFO (safe for release); BaseApplication passes DEBUG in debug
- *   builds, so trigger traces vanish from production.
+ *   builds, so trigger traces vanish from the production log file
+ *   and platform mirror (crash-report breadcrumbs still carry every
+ *   trigger).
  * @param httpClientFactory builds the ONE shared HTTP client from the
  *   shared [Json]; the default picks the bundled OkHttp engine, tests
  *   substitute a MockEngine here. Endpoints are NOT configured here:

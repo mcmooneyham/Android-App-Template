@@ -104,8 +104,9 @@ suspend fun <ResultType> retry(
  *
  * Returns only when [operation] completes normally. Cancellation
  * rethrows immediately, exactly like [retry]. Every non-cancellation
- * failure is retried: a bridge must never die (pass a bounded
- * [policy] to give up instead).
+ * Exception is retried, so a bridge survives any recoverable failure
+ * (pass a bounded [policy] to give up instead); Errors are never
+ * caught, exactly like [retry].
  *
  * ```
  * managerScope.launch {

@@ -42,8 +42,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // Demonstrates the DataStore-backed preference round trip:
-        // the first cold start renders "First launch", later ones
-        // "Welcome back!" (until cleared from Settings).
+        // launch marks the welcome seen, so Home settles on "Welcome
+        // back!" every start; "First launch" shows after clearing the
+        // flag from Settings, until the next launch writes it again.
         mainViewModel.markWelcomeSeen()
 
         // Cold-start links ride the launching intent. On recreation

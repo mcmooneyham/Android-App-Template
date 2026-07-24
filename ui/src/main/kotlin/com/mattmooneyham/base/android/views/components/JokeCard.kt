@@ -60,7 +60,8 @@ fun JokeCard(
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
     // Non-null makes the whole card tappable: the navigation
-    // affordance HomePage wires to the router. The testTag is the
+    // affordance the shell wires to the router through HomePage's
+    // semantic onOpenJokeDetail lambda. The testTag is the
     // instrumented suite's stable handle for that tap.
     onOpenDetails: (() -> Unit)? = null,
 ) {

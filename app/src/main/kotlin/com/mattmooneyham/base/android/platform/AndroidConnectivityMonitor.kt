@@ -38,10 +38,12 @@ class AndroidConnectivityMonitor(
             as ConnectivityManager
 
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                onConnectivityChanged(true)
-            }
-
+            // Deliberately NO onAvailable override: it fires before
+            // capabilities are known, and reporting true there would
+            // break the VALIDATED-only contract (a captive portal
+            // would flash "online"). onCapabilitiesChanged is
+            // guaranteed to follow onAvailable immediately, so the
+            // first honest answer arrives right after.
             override fun onLost(network: Network) {
                 onConnectivityChanged(false)
             }

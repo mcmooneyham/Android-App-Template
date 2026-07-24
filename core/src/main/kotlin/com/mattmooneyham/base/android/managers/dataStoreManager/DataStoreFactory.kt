@@ -33,8 +33,8 @@ fun createDataStoreScope(): CoroutineScope = CoroutineScope(
 /**
  * Creates the Preferences DataStore backing [DataStoreManager]. DataStore
  * allows only ONE instance per file per process, so this is called
- * exactly once per store file, by
- * [com.mattmooneyham.base.android.di.AppComponent], and cached there.
+ * exactly once per store file, by AppComponent (in :app), and cached
+ * there.
  *
  * @param coroutineScope the store's IO scope (see [createDataStoreScope]);
  *   the caller keeps it and cancels it on component close.

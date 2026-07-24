@@ -11,7 +11,7 @@ import com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagPro
  * The callback is invoked on the CALLER's thread, matching the real
  * contract ("possibly from a background thread"); the manager hops
  * onto its own confinement either way, so flag-driven assertions must
- * await [com.mattmooneyham.base.android.managers.featureFlagManager.FeatureFlagsChanged]
+ * await FeatureFlagsChanged
  * events rather than assume synchronous resolution.
  */
 class FakeFeatureFlagProvider : FeatureFlagProvider {

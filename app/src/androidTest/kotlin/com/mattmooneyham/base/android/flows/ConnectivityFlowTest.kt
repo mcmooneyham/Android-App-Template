@@ -8,7 +8,7 @@ import org.junit.Test
 
 /**
  * Live event-bus-to-UI binding: publishing on the real EventManager
- * (public API, exactly what the NetworkManager does) must flip the
+ * (public API, exactly what the ConnectivityManager does) must flip the
  * HeroCard's connectivity chip with no viewmodel in between.
  */
 class ConnectivityFlowTest {

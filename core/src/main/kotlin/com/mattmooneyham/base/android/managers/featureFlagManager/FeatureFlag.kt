@@ -7,8 +7,9 @@ package com.mattmooneyham.base.android.managers.featureFlagManager
  * ```
  * object JokeAutoRetryOnReconnectFlag : BooleanFlag(
  *     flagKey = "joke.autoRetryOnReconnect",
- *     default = true,
- *     description = "Auto-refresh a failed joke on reconnect",
+ *     default = false,
+ *     description =
+ *         "Auto-refresh a failed joke when connectivity returns",
  * )
  * ```
  *

@@ -26,8 +26,8 @@ import kotlinx.serialization.json.Json
  * component is production code; only the boundaries are faked:
  *
  * - HTTP: [FakeJokeApi] behind Ktor's MockEngine, injected through
- *   AppConfig.httpClientFactory (the component's construction-time
- *   joke fetch therefore never touches the network).
+ *   AppConfig.httpClientFactory (the startup joke fetch that start()
+ *   runs therefore never touches the network).
  * - Connectivity: [FakeConnectivityMonitor], driven by setConnected.
  * - Storage: a unique temporary directory per instance (DataStore
  *   allows one instance per file per process, so directories are
@@ -40,8 +40,9 @@ import kotlinx.serialization.json.Json
  *   while manager confinements remain real serial threads; awaiting
  *   assertions therefore use the real-time TestEventRecorder kit.
  *
- * Usage: construct fresh in each test (script [jokeApi] first when the
- * construction-time fetch matters) and ALWAYS [close] in teardown; it
+ * Usage: construct fresh in each test (script [jokeApi] first when
+ * the startup fetch matters: autoStart runs start() during harness
+ * construction) and ALWAYS [close] in teardown; it
  * closes the component, restores Main, and deletes the temp files.
  */
 @OptIn(ExperimentalCoroutinesApi::class)

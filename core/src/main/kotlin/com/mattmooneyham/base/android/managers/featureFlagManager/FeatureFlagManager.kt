@@ -60,8 +60,7 @@ data class FlagSnapshot(
  * values land asynchronously shortly after launch), and views observe
  * via the `flagState` composable.
  *
- * Provided as a singleton via
- * [com.mattmooneyham.base.android.di.AppComponent].
+ * Provided as a singleton via AppComponent (in :app).
  */
 class FeatureFlagManager(
     private val flags: List<BooleanFlag>,

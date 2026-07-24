@@ -1,7 +1,8 @@
 # Architecture scaling guide
 
-The template ships the smallest skeleton that scales: one module, one
-composition root, a handful of peer managers on a typed event bus.
+The template ships the smallest skeleton that scales: a three-module
+layer cut, one composition root, a handful of peer managers on a
+typed event bus.
 This file holds the designs that were DELIBERATELY deferred, adapted
 to this codebase, each with an explicit adoption threshold.
 
@@ -243,7 +244,7 @@ three before promising a shared module.
 ## 4. Event governance
 
 Adoption threshold: the module split, or about 20 event keys,
-whichever comes first. With 4 keys, grep is a catalog and review is
+whichever comes first. With five keys, grep is a catalog and review is
 governance; with 20, drift begins to win.
 
 Three mechanisms, in adoption order:

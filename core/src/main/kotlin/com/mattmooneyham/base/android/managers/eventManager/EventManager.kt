@@ -401,8 +401,10 @@ class EventManager {
         null -> ""
         is Boolean, is Int, is Long, is Double ->
             " (payload: $payload)"
-        // Strings can carry user content and the trace lands in the
-        // exportable log file; describe the shape, never the value.
+        // Strings can carry user content, and the trace always
+        // reaches the crash-report breadcrumb ring (plus the
+        // exportable log file in DEBUG-level builds); describe the
+        // shape, never the value.
         is String -> " (payload: String, ${payload.length} chars)"
         else -> " (payload: ${payload::class.simpleName})"
     }

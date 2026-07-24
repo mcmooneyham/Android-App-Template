@@ -4,7 +4,8 @@ import com.mattmooneyham.base.android.managers.logManager.CrashReporter
 
 /**
  * In-memory crash backend for tests. Injected through
- * AppConfig.crashReporter (via [TestAppContext]) so specs can assert
+ * AppConfig.crashReporter (via the app-test TestAppContext harness)
+ * so specs can assert
  * exactly what the AppComponent's uncaught-exception handler reported.
  */
 class FakeCrashReporter : CrashReporter {

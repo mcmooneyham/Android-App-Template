@@ -50,8 +50,9 @@ AppComponent (di/) .............. plain class, manual constructor
      |-- eventManager ........... EventManager: the bus; OWNS every
      |        ^                   event stream (keys are identifiers)
      |        |  attachLogManager (the one sanctioned setter cycle)
-     |-- logManager ............. Logcat + rotating log file
-     |-- networkManager ......... validated connectivity, behind the
+     |-- logManager ............. platform log mirror + rotating
+     |                            log file + telemetry funnel
+     |-- connectivityManager .... validated connectivity, behind the
      |                            ConnectivityMonitor boundary
      |-- dataStoreManager ....... Preferences DataStore facade
      |-- featureFlagManager ..... layered flags: debug override >
@@ -89,7 +90,9 @@ viewmodels forward user actions back to managers.
   the `ConnectivityMonitor` boundary, the minimum log level, an
   `httpClientFactory: (Json) -> HttpClient` seam (tests swap in a Ktor
   MockEngine), an injectable `Clock`, a `CrashReporter` seam (no-op by
-  default), and the log-rotation cap. Every field with a production
+  default), the `PlatformLogWriter` mirror, the `FeatureFlagProvider`
+  seam with its overrides toggle, and the log-rotation cap. Every
+  field with a production
   default can be overridden per test. Endpoint URLs are deliberately
   NOT here: each manager declares its own base URL beside itself and
   wraps the shared `httpClient` in its own `ApiClient`, so apps built
@@ -101,7 +104,9 @@ viewmodels forward user actions back to managers.
   (`closedBy` for resources, `registered()` for managers), so
   `close()` just walks the self-mirrored registry in reverse
   construction order, cancelling the event bus LAST so teardown
-  events still deliver; feature PRs never edit `close()`. The
+  events still deliver; feature PRs never edit `close()` (the one
+  hand-maintained step is the crash-handler restore, which must run
+  FIRST and conditionally). The
   component also installs a `Thread` default uncaught-exception
   handler that reports the fatal to the `CrashReporter`, logs it
   (`logFatal`, so the crash is never double-counted), drains the log
@@ -115,8 +120,9 @@ viewmodels forward user actions back to managers.
   exactly ONE `AppComponent` per process. Managers never see a
   `Context`, which is what lets JVM tests build a real component from
   fakes alone.
-- `AppModule` is a thin Hilt adapter: every provider reads a member
-  FROM the component; Hilt never constructs a manager itself.
+- `AppModule` is a thin Hilt adapter: every MANAGER provider reads a
+  member FROM the component (plain build metadata like `BuildInfo` is
+  constructed in place); Hilt never constructs a manager itself.
 
 Wiring conventions (also stated in the `AppComponent` KDoc, which is
 the source of truth):
@@ -144,7 +150,7 @@ the source of truth):
 ### The event contract
 
 Event keys are plain named objects declared BESIDE the manager that
-publishes them, in two flavors (`managers/EventKey.kt`):
+publishes them, in two flavors (`managers/eventManager/EventKey.kt`):
 
 - `StateKey<Payload>`: a replayed state event. The payload type is
   part of the key's TYPE, so a mistyped `trigger` or `listenTo` does
@@ -160,7 +166,7 @@ declared today:
   SESSION lifetime, declared beside `JokeManager`.
 - `NetworkConnectivityChanged`: `StateKey<Boolean>`,
   `"network.ConnectivityChanged"`, APP lifetime (connectivity is a
-  device fact, not user state), beside `NetworkManager`.
+  device fact, not user state), beside `ConnectivityManager`.
 - `HasSeenWelcomeChanged`: `StateKey<Boolean>`,
   `"datastore.HasSeenWelcomeChanged"`, SESSION lifetime, beside
   `DataStoreManager`.
@@ -199,8 +205,10 @@ The contract every publisher and subscriber can rely on:
   drops the OLDEST buffered event, latest wins).
 - A listener that throws is logged loudly and KEPT ALIVE; one bad
   payload must not silently kill a screen's subscription.
-- Every trigger passes one log choke point, so the whole app's event
-  traffic is greppable in the log file.
+- Every trigger passes one breadcrumb choke point: it always reaches
+  the crash report's breadcrumb ring, and lands in the log file as a
+  DEBUG line only when the minimum level admits it (debug builds), so
+  the whole app's event traffic is greppable there.
 
 Latest-wins replay means events are projections of state, never a
 lossless work queue. Work that must not be lost belongs in a durable
@@ -268,7 +276,8 @@ needs to react to another manager's events.
 - `BuildInfo` (versionName, build stamp, isDebugBuild) is constructed
   from BuildConfig in `:app` and injected into the UI layer, which
   has no application BuildConfig of its own.
-- `CrashReporter` (`di/CrashReporter.kt`) is the crash-backend seam
+- `CrashReporter` (`managers/logManager/CrashReporter.kt`, in
+  `:core` beside its owning manager) is the crash-backend seam
   (its KDoc carries copy-paste Crashlytics and Sentry shapes). The
   component's handler calls `recordFatal`; everything else funnels
   through the LogManager: every accepted ERROR line becomes a
@@ -359,7 +368,8 @@ ARCHITECTURE-SCALING.md):
   from `EventManagerCompose.kt`, backed by the `LocalEventManager`
   CompositionLocal that `MainActivity` provides).
 - `animations/AppAnimations.kt`: ALL motion definitions live here.
-- `constants/`: `BrandColors` semantic tokens and `LogLevel`.
+- `constants/`: `BrandColors` semantic tokens (`LogLevel` lives in
+  `:core`'s constants package).
 
 ## Demo feature pattern
 
