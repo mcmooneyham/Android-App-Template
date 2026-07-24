@@ -19,6 +19,51 @@ sits behind a small port interface with the Android adapter at the
 edge, which is what lets the entire core be a plain Kotlin JVM
 module.
 
+How state moves (one loop, one direction):
+
+```mermaid
+flowchart LR
+    M["Manager<br/>(owns state)"]
+    B(("Event<br/>bus"))
+    V["Views<br/>(observe directly)"]
+    VM["ViewModel<br/>(thin, writes only)"]
+    M2["Another manager"]
+    M -- "publishes typed events" --> B
+    B -- "replayed state,<br/>delivered on Main" --> V
+    V -- "user action" --> VM
+    VM -- "forwards the action" --> M
+    M2 -- "publishes too" --> B
+    B -. "choreography: subscribe,<br/>never hold a reference" .-> M2
+```
+
+Where the platform touches the code (ports and adapters):
+
+```mermaid
+flowchart LR
+    subgraph CORE[":core (android.* does not exist here)"]
+        MGR["Manager"] --> PORT["Port<br/>(capability interface)"]
+    end
+    subgraph EDGE[":app edge"]
+        AD["Android adapter"] --> SDK["Platform SDK"]
+    end
+    subgraph TESTS["JVM tests"]
+        FAKE["Hand-written fake"]
+    end
+    AD -. "implements" .-> PORT
+    FAKE -. "implements" .-> PORT
+```
+
+A component's life (each phase does one job):
+
+```mermaid
+flowchart LR
+    C["construct<br/>declaration order,<br/>wiring only, no IO"]
+    S["start<br/>first fetches and<br/>warmups, exactly once"]
+    R["running<br/>publish, react,<br/>observe"]
+    X["close<br/>reverse order,<br/>bus torn down last"]
+    C --> S --> R --> X
+```
+
 ### What this buys
 
 - No god objects. Managers are peers with no references to each
@@ -69,7 +114,21 @@ standard stack would serve it more simply.
 ## Module structure
 
 THE COMPILER IS THE ARBITER of the layering; cross-layer imports are
-build failures, not review comments:
+build failures, not review comments. Arrows point at what a module
+may see:
+
+```mermaid
+flowchart TD
+    APP[":app<br/>composition root, adapters,<br/>Application + Activity"]
+    UI[":ui<br/>views, viewmodels, navigation, theme"]
+    CORE[":core (Kotlin JVM)<br/>managers, event bus, ports, api"]
+    T[":templates<br/>living documentation,<br/>ships in nothing"]
+    APP --> UI
+    APP --> CORE
+    UI --> CORE
+    T -.-> UI
+    T -.-> CORE
+```
 
 - `:core` (Kotlin JVM library): the managers, the event bus, the port
   interfaces, and the API layer. `android.*` / `androidx.*` are not
