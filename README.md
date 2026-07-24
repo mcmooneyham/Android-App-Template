@@ -180,20 +180,31 @@ removed, it belongs in `:core`.
   app's recent history attached.
 - The whole tree is readable in an afternoon.
 
-## Trade-offs
+## Notable features
 
-- "Who reacts to this event" is a grep, not a call hierarchy.
-- The bus is lossy by design (latest value wins). Right for state,
-  wrong for work items that must never be dropped.
-- DI is wired by hand, so there are no compile-time missing-binding
-  errors. Guard tests stand in for them.
-- The router is hand-rolled: typed and process-death-safe, but
-  fancier navigation is deferred until a real need shows up.
-
-This also isn't Google's default architecture (per-screen ViewModel
-state holders). An app that's mostly independent CRUD screens with
-little shared state wouldn't earn the trade, and the standard stack
-would serve it more simply.
+- **Retry utility** (`util/Retry.kt`): one small policy type and two
+  functions. `retry` handles one-shot work with bounded attempts and
+  capped exponential backoff, rethrowing cancellation and permanent
+  failures immediately. `retryForever` keeps long-lived stream
+  bridges alive, resetting the backoff each time the stream emits
+  successfully. The DataStore bridges ride it, so one bad read costs
+  a short delay instead of the feature.
+- **Feature flags**: typed boolean flags resolved as debug override >
+  remote provider > compiled default. A debug-only sheet in Settings
+  lists every flag and lets you override it on the spot. Release
+  builds never even create the override store.
+- **Crash-friendly logging**: every log line and every event on the
+  bus leaves a breadcrumb, errors become non-fatals through a
+  pluggable crash-reporter seam, and the rotating log file can be
+  exported straight from Settings.
+- **Typed navigation**: destinations are sealed classes, back stacks
+  are per tab, deep links map to destinations in one testable method,
+  and the whole navigation state survives process death as a single
+  JSON string.
+- **Guard tests**: conventions are enforced by the build, not the
+  reviewer. A flag missing from the registry, a constructor doing
+  network IO, or a second publisher on an event key all fail the
+  test suite.
 
 ## Stack
 
