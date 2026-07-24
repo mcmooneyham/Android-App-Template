@@ -69,3 +69,7 @@ rootProject.name = "Android-App-Template"
 include(":app")
 include(":core")
 include(":ui")
+// Living documentation: fully-commented exemplar files that compile
+// (and test) on every build so they can never rot, but which no
+// module depends on, so they ship in nothing. See templates/README.md.
+include(":templates")

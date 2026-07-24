@@ -27,6 +27,11 @@ build failures, not review comments:
   in `di/`), the platform adapters (`platform/`:
   `AndroidConnectivityMonitor`, `AndroidLogWriter`), `Application`,
   the single `Activity`, manifest, and resources. Depends on both.
+- `:templates` (living documentation): fully-commented exemplar files
+  (manager, port+adapter, page, viewmodel, destination, fake, specs)
+  that compile and test on every build so they cannot rot, but which
+  nothing depends on, so they ship in nothing. Start any new
+  component by copying one; see [templates/README.md](templates/README.md).
 
 Which module does a file go in: if it needs `android.*`, it is an
 adapter (`:app/platform`) or UI (`:ui`); if removing every platform
