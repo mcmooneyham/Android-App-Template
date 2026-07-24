@@ -306,8 +306,9 @@ DataStore 1.2.1, kotlinx-serialization.
 ```
 
 The same gate (plus the R8 release build and lint) runs on every
-push via GitHub Actions: see `.github/workflows/ci.yml`. The repo is
-self-contained; no external checkouts required.
+push via GitHub Actions, and a flag-gated second job runs the UI
+flow tests on an emulator: see `.github/workflows/ci.yml`. The repo
+is self-contained; no external checkouts required.
 
 ## Digging deeper
 
