@@ -3,10 +3,6 @@ package com.mattmooneyham.base.android.constants
 /**
  * Brand palette, expressed as ARGB values and wrapped with Compose's
  * Color(Long) at the point of use.
- *
- * Source of truth: the "PM Color Reference Guide" (Figma Scaffold WEB
- * LIBRARY chips are canonical). These are the SEMANTIC tokens; reference
- * them in product UI rather than raw hex values.
  */
 object BrandColors {
 
@@ -23,10 +19,7 @@ object BrandColors {
     val WARNING = 0xFFEFA513          // Non-blocking warnings
     val DANGER = 0xFFD93F3F           // Errors, destructive actions
 
-    // Dark-mode surfaces. Not part of the reference guide (it defines no
-    // dark palette); derived for a consistent dark mode.
-    // Matches iOS secondarySystemGroupedBackground (dark), the familiar
-    // grouped-card tone.
+    // Dark-mode surfaces. 
     val SURFACE_DARK = 0xFF1C1C1E     // Cards / grouped surfaces on dark
     val OUTLINE_DARK = 0xFF3A3A3A     // Dividers on dark
 
