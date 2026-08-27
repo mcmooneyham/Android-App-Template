@@ -35,6 +35,7 @@ class BaseApplication : Application(), AppComponentHost {
         appComponent = AppComponent(
             AppConfig(
                 appFilesDirectory = filesDir,
+                appCacheDirectory = cacheDir,
                 connectivityMonitor = AndroidConnectivityMonitor(this),
                 platformLogWriter = AndroidLogWriter(),
                 // Debug builds log everything; release keeps INFO and

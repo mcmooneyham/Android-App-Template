@@ -1,15 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Preferences back up and transfer; the device-specific log files
-     do not. Paths mirror AppNames.LOG_FILE_NAME by hand. -->
+     do not. The path mirrors AppNames.LOG_DIRECTORY_NAME by hand. -->
 <data-extraction-rules>
     <cloud-backup>
-        <exclude domain="file" path="base_app.log" />
-        <exclude domain="file" path="base_app.1.log" />
-        <exclude domain="file" path="base_app-export.log" />
+        <exclude domain="file" path="logs/" />
     </cloud-backup>
     <device-transfer>
-        <exclude domain="file" path="base_app.log" />
-        <exclude domain="file" path="base_app.1.log" />
-        <exclude domain="file" path="base_app-export.log" />
+        <exclude domain="file" path="logs/" />
     </device-transfer>
 </data-extraction-rules>

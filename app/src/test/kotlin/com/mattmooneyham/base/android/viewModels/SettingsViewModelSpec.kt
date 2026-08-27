@@ -5,6 +5,7 @@ import com.mattmooneyham.base.android.managers.dataStoreManager.HasSeenWelcomeCh
 import com.mattmooneyham.base.android.managers.logManager.LogsCleared
 import com.mattmooneyham.base.android.testkit.TestAppContext
 import java.io.File
+import java.util.zip.ZipFile
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -46,6 +47,21 @@ class SettingsViewModelSpec {
         featureFlagManager = app.component.featureFlagManager,
         buildInfo = testBuildInfo,
     )
+
+    private fun readZipContents(zipPath: String): String =
+        ZipFile(zipPath).use { zipFile ->
+            buildString {
+                for (zipEntry in zipFile.entries()) {
+                    append(
+                        zipFile.getInputStream(zipEntry)
+                            .use { entryStream ->
+                                entryStream.readBytes()
+                                    .decodeToString()
+                            },
+                    )
+                }
+            }
+        }
 
     @Test
     fun `about values come straight from the injected build info`() {
@@ -106,19 +122,18 @@ class SettingsViewModelSpec {
             assertNotNull("a logged app must have an export", exportPath)
             assertTrue(
                 "the export must contain the line logged before it",
-                File(exportPath!!).readText().contains(historyMarker),
+                readZipContents(exportPath!!).contains(historyMarker),
             )
         }
 
     @Test
     fun `the export snapshot includes the rotated history`() =
         runBlocking<Unit> {
-            // A tiny rotation cap pushes early lines into the ".1"
-            // history file, which readLogContents excludes by
+            // A tiny roll cap pushes early lines into a numbered
+            // sibling file, which readLogContents excludes by
             // contract; the export must still carry them. autoStart
-            // off: the joke fetch's async log lines could otherwise
-            // force a SECOND rotation that discards the history this
-            // test plants.
+            // off keeps the fill loop's flush-and-read cadence free
+            // of the startup fetch's interleaved lines.
             val app = TestAppContext(
                 maxLogFileSizeBytes = 512L,
                 autoStart = false,
@@ -151,7 +166,7 @@ class SettingsViewModelSpec {
             assertNotNull(exportPath)
             assertTrue(
                 "the export must include rotated history",
-                File(exportPath!!).readText().contains(earlyMarker),
+                readZipContents(exportPath!!).contains(earlyMarker),
             )
         }
 
@@ -171,11 +186,20 @@ class SettingsViewModelSpec {
                 "the marker must be on disk before the clear",
                 logManager.readLogContents().contains(historyMarker),
             )
+            val exportZipPath = viewModel.writeLogExportSnapshot()
+            assertNotNull(
+                "a logged app must have an export",
+                exportZipPath,
+            )
 
             viewModel.clearLogs()
 
             // The signal fires once the delete actually happened.
             recorder.expectEvent(LogsCleared)
+            assertFalse(
+                "the export zip must be gone after the clear",
+                File(exportZipPath!!).exists(),
+            )
 
             // The audit line is enqueued after the clear, so a flush
             // makes the post-clear file contents deterministic.

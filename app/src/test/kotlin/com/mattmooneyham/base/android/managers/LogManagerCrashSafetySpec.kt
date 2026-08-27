@@ -15,7 +15,7 @@ import org.junit.Test
  * The R6 crash-safety mechanisms, end to end through a real
  * AppComponent: the uncaught-exception handler chain (report the
  * fatal, log it, flush, delegate, restore on close), the ERROR-level
- * persistence policy, and size-capped log rotation.
+ * persistence policy, and size-capped log rolls.
  */
 class LogManagerCrashSafetySpec {
 
@@ -107,10 +107,10 @@ class LogManagerCrashSafetySpec {
     }
 
     @Test
-    fun `the log file rotates into a single history file at the cap`() {
+    fun `the day's file rolls to numbered siblings at the cap`() {
         // A tiny cap: a handful of ~150-byte lines crosses it several
-        // times over, exercising rotation and history replacement.
-        val app = startApp(maxLogFileSizeBytes = TINY_ROTATION_CAP_BYTES)
+        // times over, forcing repeated rolls within the day.
+        val app = startApp(maxLogFileSizeBytes = TINY_ROLL_CAP_BYTES)
 
         repeat(FILLER_LINE_COUNT) { lineIndex ->
             app.component.logManager.info(
@@ -119,30 +119,33 @@ class LogManagerCrashSafetySpec {
         }
         runBlocking { app.component.logManager.flush() }
 
-        // The live file keeps appending while exactly one ".1" history
-        // file holds the previous generation.
-        val liveLogFile = File(
-            app.filesDirectory,
-            LogManager.DEFAULT_LOG_FILE_NAME,
-        )
-        // Derive the history name from the constant so a rename of
-        // the live log file can never silently break this assertion.
-        val rotatedLogFile = File(
-            app.filesDirectory,
-            LogManager.DEFAULT_LOG_FILE_NAME
-                .replace(".log", ".1.log"),
+        // Derived from the constant so a rename of the live log file
+        // can never silently break these assertions.
+        val datedFileName = LogManager.DEFAULT_LOG_FILE_NAME
+            .replace(".log", "-2026-01-01.log")
+        val liveLogFile = File(app.logsDirectory, datedFileName)
+        val firstRolledLogFile = File(
+            app.logsDirectory,
+            datedFileName.replace(".log", ".1.log"),
         )
         assertTrue(liveLogFile.exists())
-        assertTrue(rotatedLogFile.exists())
+        assertTrue(firstRolledLogFile.exists())
+
+        val logFileStem =
+            LogManager.DEFAULT_LOG_FILE_NAME.removeSuffix(".log")
+        val datedLogFileNamePattern = Regex(
+            "^${Regex.escape(logFileStem)}" +
+                "-\\d{4}-\\d{2}-\\d{2}(\\.\\d+)?\\.log$",
+        )
         assertTrue(
-            app.filesDirectory
-                .listFiles { file -> file.name.endsWith(".log") }!!
-                .size == 2,
+            app.logsDirectory.listFiles()!!.all { logFile ->
+                datedLogFileNamePattern.matches(logFile.name)
+            },
         )
     }
 
     private companion object {
-        const val TINY_ROTATION_CAP_BYTES = 512L
+        const val TINY_ROLL_CAP_BYTES = 512L
         const val FILLER_LINE_COUNT = 30
         const val PROMPT_WRITE_TIMEOUT_MILLIS = 5_000L
         const val POLL_INTERVAL_MILLIS = 10L

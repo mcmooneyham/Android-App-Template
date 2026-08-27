@@ -1,6 +1,7 @@
 package com.mattmooneyham.base.android.di
 
 import com.mattmooneyham.base.android.api.createDefaultJson
+import com.mattmooneyham.base.android.constants.AppNames
 import com.mattmooneyham.base.android.managers.dataStoreManager.DATA_STORE_FILE_NAME
 import com.mattmooneyham.base.android.managers.dataStoreManager.DataStoreManager
 import com.mattmooneyham.base.android.managers.ConfinedManager
@@ -99,8 +100,14 @@ class AppComponent(config: AppConfig) {
 
     val logManager = LogManager(
         fileSettings = LogFileSettings(
-            directoryPath = config.appFilesDirectory.absolutePath,
+            directoryPath = File(
+                config.appFilesDirectory,
+                AppNames.LOG_DIRECTORY_NAME,
+            ).absolutePath,
             maxFileSizeBytes = config.maxLogFileSizeBytes,
+            maxDays = config.maxLogRetentionDays,
+            maxTotalSizeBytes = config.maxLogTotalSizeBytes,
+            exportDirectoryPath = config.appCacheDirectory.absolutePath,
         ),
         minimumLogLevel = config.minimumLogLevel,
         eventManager = eventManager,

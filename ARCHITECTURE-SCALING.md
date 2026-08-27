@@ -240,8 +240,9 @@ including the DataStore `-core` artifacts, Ktor, okio, and the
 kotlinx libraries, are already multiplatform). It is KMP-shaped, not
 KMP-ready: the known JVM-isms needing expect/actual are the bus's
 WeakReference owner tracking, the LogManager's stack-trace call-site
-capture, and java.io.File in the storage seams. Budget for those
-three before promising a shared module.
+capture, its java.util.zip export writer, and java.io.File in the
+storage seams. Budget for those four before promising a shared
+module.
 
 ## 4. Event governance
 

@@ -9,7 +9,7 @@ package com.mattmooneyham.base.android.constants
  * Two places cannot read Kotlin constants and must be kept in sync BY
  * HAND when renaming:
  *  - the deep-link scheme literal in app/src/main/AndroidManifest.xml
- *  - the log-file exclusions in
+ *  - the log-directory exclusion in
  *    app/src/main/res/xml/data_extraction_rules.xml
  */
 object AppNames {
@@ -17,10 +17,15 @@ object AppNames {
     /** The stem of every file this app creates in its files dir. */
     const val FILE_BASE_NAME = "base_app"
 
-    /** The live log file; rotation inserts ".1" before the extension
-     * and the Settings export appends "-export" (LogManager derives
-     * both from this name). */
+    /** Naming template for log files: LogManager splits it into stem
+     * and extension to derive the daily dated files
+     * (base_app-2026-01-01.log), their numbered size rolls
+     * (base_app-2026-01-01.1.log), and the "-export.zip" snapshot. */
     const val LOG_FILE_NAME = "$FILE_BASE_NAME.log"
+
+    /** Subdirectory of the files dir holding every log file; mirrored
+     * by hand in app/src/main/res/xml/data_extraction_rules.xml. */
+    const val LOG_DIRECTORY_NAME = "logs"
 
     /** The app's Preferences DataStore file. */
     const val PREFERENCES_STORE_FILE_NAME =

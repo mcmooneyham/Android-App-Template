@@ -27,8 +27,12 @@ import kotlinx.serialization.json.Json
  * MockEngine).
  *
  * @param appFilesDirectory directory for app-private files (the app's
- *   filesDir); hosts the log file and the Preferences DataStore. Tests
- *   pass a unique temporary directory per test.
+ *   filesDir); hosts the logs/ subdirectory and the Preferences
+ *   DataStore. Tests pass a unique temporary directory per test.
+ * @param appCacheDirectory directory for regenerable files (the app's
+ *   cacheDir); hosts the log export zip, which the FileProvider grant
+ *   in log_export_paths.xml serves from there. Tests pass a unique
+ *   temporary directory per test.
  * @param connectivityMonitor the connectivity boundary; production
  *   passes an AndroidConnectivityMonitor built in BaseApplication,
  *   tests inject a fake and drive it by hand.
@@ -47,8 +51,12 @@ import kotlinx.serialization.json.Json
  * @param crashReporter crash backend seam (Crashlytics, Sentry, ...);
  *   the AppComponent's uncaught-exception handler reports fatals to
  *   it. Defaults to a no-op.
- * @param maxLogFileSizeBytes size at which the log file rotates to
- *   its single ".1" history file.
+ * @param maxLogFileSizeBytes size at which the day's log file rolls
+ *   to its next numbered sibling.
+ * @param maxLogRetentionDays days of log history kept, the current
+ *   day included; older files are pruned in the background.
+ * @param maxLogTotalSizeBytes retention cap across all log files;
+ *   the oldest files are pruned first when it is exceeded.
  * @param platformLogWriter the platform log mirror; production passes
  *   the AndroidLogWriter (Logcat) adapter built in BaseApplication,
  *   JVM tests keep the no-op default.
@@ -63,12 +71,15 @@ import kotlinx.serialization.json.Json
  */
 data class AppConfig(
     val appFilesDirectory: File,
+    val appCacheDirectory: File,
     val connectivityMonitor: ConnectivityMonitor,
     val minimumLogLevel: LogLevel = LogLevel.INFO,
     val httpClientFactory: (Json) -> HttpClient = ::createHttpClient,
     val clock: Clock = Clock.System,
     val crashReporter: CrashReporter = NoOpCrashReporter,
     val maxLogFileSizeBytes: Long = LogManager.DEFAULT_MAX_LOG_FILE_BYTES,
+    val maxLogRetentionDays: Int = LogManager.DEFAULT_MAX_LOG_DAYS,
+    val maxLogTotalSizeBytes: Long = LogManager.DEFAULT_MAX_LOG_TOTAL_BYTES,
     val platformLogWriter: PlatformLogWriter = NoOpPlatformLogWriter,
     val featureFlagProvider: FeatureFlagProvider = NoOpFeatureFlagProvider,
     val featureFlagOverridesEnabled: Boolean = false,

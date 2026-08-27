@@ -16,8 +16,8 @@ AppComponent (di/) .............. plain class, manual constructor
      |-- eventManager ........... EventManager: the bus; OWNS every
      |        ^                   event stream (keys are identifiers)
      |        |  attachLogManager (the one sanctioned setter cycle)
-     |-- logManager ............. platform log mirror + rotating
-     |                            log file + telemetry funnel
+     |-- logManager ............. platform log mirror + rolling
+     |                            log files + telemetry funnel
      |-- connectivityManager .... validated connectivity, behind the
      |                            ConnectivityMonitor boundary
      |-- dataStoreManager ....... Preferences DataStore facade
@@ -52,18 +52,18 @@ viewmodels forward user actions back to managers.
 ## Composition root (`di/`)
 
 - `AppConfig` gathers everything the component needs from the outside
-  world into one value: the files directory (a typed `java.io.File`),
-  the `ConnectivityMonitor` boundary, the minimum log level, an
-  `httpClientFactory: (Json) -> HttpClient` seam (tests swap in a Ktor
-  MockEngine), an injectable `Clock`, a `CrashReporter` seam (no-op by
-  default), the `PlatformLogWriter` mirror, the `FeatureFlagProvider`
-  seam with its overrides toggle, and the log-rotation cap. Every
-  field with a production
-  default can be overridden per test. Endpoint URLs are deliberately
-  NOT here: each manager declares its own base URL beside itself and
-  wraps the shared `httpClient` in its own `ApiClient`, so apps built
-  on the template add services by adding clients, never by widening a
-  global URL.
+  world into one value: the files and cache directories (typed
+  `java.io.File`s), the `ConnectivityMonitor` boundary, the minimum
+  log level, an `httpClientFactory: (Json) -> HttpClient` seam (tests
+  swap in a Ktor MockEngine), an injectable `Clock`, a `CrashReporter`
+  seam (no-op by default), the `PlatformLogWriter` mirror, the
+  `FeatureFlagProvider` seam with its overrides toggle, and the three
+  log caps (per-file roll size, retention days, total size). Every
+  field with a production default can be overridden per test. Endpoint
+  URLs are deliberately NOT here: each manager declares its own base
+  URL beside itself and wraps the shared `httpClient` in its own
+  `ApiClient`, so apps built on the template add services by adding
+  clients, never by widening a global URL.
 - `AppComponent` is a plain class: property initializers run top to
   bottom, so declaration order IS the construction order. Every
   member registers its own teardown BESIDE its declaration
@@ -285,11 +285,20 @@ needs to react to another manager's events.
   ANR the calling thread; the writer lands any remainder moments
   later), and `flushForCrash()` keeps the unbounded drain for a dying
   process. Failed file writes report through Logcat, one non-fatal
-  per process, and an honest marker line in the log itself. The log
-  file rotates by size (`base_app.log` becomes `base_app.1.log` at
-  the `AppConfig` cap; one rotated file is kept), and
-  `writeExportSnapshot()` copies rotated-plus-live into an export
-  file that Settings shares as a FileProvider URI stream (never
+  per process, and an honest marker line in the log itself.
+  Log files live in a `logs/` subdirectory of filesDir, one per UTC
+  day (`base_app-2026-01-01.log`), and a file reaching the
+  `AppConfig` roll cap is renamed to the day's next numbered sibling
+  (`base_app-2026-01-01.1.log`) so appends continue into a fresh
+  file. Retention runs asynchronously on the manager's own scope,
+  never on an append or crash-drain path: files older than the
+  retention window go, then the oldest files (by modification time)
+  until the total fits the size cap, and the current day's live file
+  is never deleted, so disk use can transiently reach the cap plus
+  one file. `writeExportSnapshot()` flushes the writer, then zips
+  every log file oldest first into `base_app-export.zip` in cacheDir,
+  outside the file lock so logging never stalls behind the export;
+  Settings shares that zip as a FileProvider URI stream (never
   `EXTRA_TEXT`, which drops history and risks the ~1 MB Binder cap).
 
 ## Feature flags
@@ -421,9 +430,10 @@ spec, `:app` holds the component-level specs and the guards, and
   `:app`'s tests because it builds the real `AppComponent`.
 - `testkit/TestAppContext` builds the component from `AppConfig` with
   a Ktor MockEngine (`FakeJokeApi`), a `FakeConnectivityMonitor`, a
-  unique temp directory per test for the real DataStore and log file,
-  a pinned `VirtualClock`, and a test Main dispatcher; `close()` in
-  teardown restores everything.
+  unique temp files directory per test for the real DataStore and the
+  `logs/` subdirectory, a unique temp cache directory for the export
+  zip, a pinned `VirtualClock`, and a test Main dispatcher; `close()`
+  in teardown restores everything.
 - `testkit/TestEventRecorder` is the event assertion kit: suspending
   `expectEvent`/`expectState`, `assertOrder`, `assertNoEvent`.
 - Suites: `EventManagerContractSpec` (validation, replay vs signal,
@@ -439,11 +449,13 @@ spec, `:app` holds the component-level specs and the guards, and
   precedence, live provider updates, override persistence, the
   release lock, bridge resubscription), `LogManagerReportingSpec`
   (the telemetry funnel, breadcrumbs, level filtering, write-failure
-  markers), `LogManagerCrashSafetySpec`, `RetrySpec` (the full
+  markers), `LogManagerCrashSafetySpec`, `LogManagerRollingFileSpec`
+  (daily dated files, age and total-size prunes, the midnight
+  read fallback, zip ordering), `RetrySpec` (the full
   retry-utility contract), `AppRouterSpec` (back semantics, deep
   links, corrupt restore), `MainViewModelSpec`,
-  `SettingsViewModelSpec` (including the export snapshot's flush and
-  rotated-history guarantees), `ConnectivityManagerSpec` (duplicate
+  `SettingsViewModelSpec` (including the export zip's flush and
+  full-history guarantees), `ConnectivityManagerSpec` (duplicate
   platform reports publish once; a boot while online is never a
   reconnect edge), plus the guards:
   `FeatureFlagRegistryGuardTest` (every declared flag is registered),

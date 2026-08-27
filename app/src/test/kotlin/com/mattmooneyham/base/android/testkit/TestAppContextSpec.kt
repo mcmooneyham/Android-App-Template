@@ -50,9 +50,10 @@ class TestAppContextSpec {
             val logFilePath = app.component.logManager.logFilePath
             assertTrue(
                 logFilePath != null && logFilePath.startsWith(
-                    app.filesDirectory.absolutePath,
+                    app.logsDirectory.absolutePath,
                 ),
             )
+            assertTrue(logFilePath!!.contains("2026-01-01"))
             val logContents = app.component.logManager.readLogContents()
             assertTrue(logContents.contains("2026-01-01"))
             assertTrue(logContents.contains("AppComponent constructed"))
@@ -66,6 +67,7 @@ class TestAppContextSpec {
 
         assertTrue(app.connectivityMonitor.isStopped)
         assertFalse(app.filesDirectory.exists())
+        assertFalse(app.cacheDirectory.exists())
     }
 
     @Test

@@ -277,8 +277,8 @@ point at which each becomes worth doing.
 
 - **Crash-friendly logging**: every log line and every event on the
   bus leaves a breadcrumb, errors become non-fatals through a
-  pluggable crash-reporter seam, and the rotating log file can be
-  exported straight from Settings.
+  pluggable crash-reporter seam, and the daily rolling log files can
+  be exported as a zip straight from Settings.
 - **Typed navigation**: destinations are sealed classes, back stacks
   are per tab, deep links map to destinations in one testable method,
   and the whole navigation state survives process death as a single

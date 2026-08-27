@@ -1,6 +1,7 @@
 package com.mattmooneyham.base.android.testkit
 
 import com.mattmooneyham.base.android.api.createHttpClient
+import com.mattmooneyham.base.android.constants.AppNames
 import com.mattmooneyham.base.android.constants.LogLevel
 import com.mattmooneyham.base.android.di.AppComponent
 import com.mattmooneyham.base.android.di.AppConfig
@@ -26,9 +27,10 @@ import kotlinx.coroutines.test.setMain
  *   AppConfig.httpClientFactory (the startup joke fetch that start()
  *   runs therefore never touches the network).
  * - Connectivity: [FakeConnectivityMonitor], driven by setConnected.
- * - Storage: a unique temporary directory per instance (DataStore
+ * - Storage: unique temporary directories per instance (DataStore
  *   allows one instance per file per process, so directories are
- *   never shared) hosting the real Preferences DataStore and log file.
+ *   never shared) hosting the real Preferences DataStore, the log
+ *   files, and the export zip.
  * - Wall time: [VirtualClock], pinned and settable.
  * - Main dispatcher: an [UnconfinedTestDispatcher] installed via
  *   Dispatchers.setMain BEFORE the component is built (the
@@ -48,6 +50,8 @@ class TestAppContext(
     minimumLogLevel: LogLevel = LogLevel.DEBUG,
     crashReporter: CrashReporter = NoOpCrashReporter,
     maxLogFileSizeBytes: Long = LogManager.DEFAULT_MAX_LOG_FILE_BYTES,
+    maxLogRetentionDays: Int = LogManager.DEFAULT_MAX_LOG_DAYS,
+    maxLogTotalSizeBytes: Long = LogManager.DEFAULT_MAX_LOG_TOTAL_BYTES,
     // Overrides default ON here (unlike production's release default):
     // specs exercise the debug behavior; pass false to spec the locked
     // release resolution.
@@ -67,9 +71,17 @@ class TestAppContext(
     val flagProvider = FakeFeatureFlagProvider()
     val clock = VirtualClock()
 
-    /** Unique per-test files directory (DataStore, log file). */
+    /** Unique per-test files directory (DataStore, logs/ subdir). */
     val filesDirectory: File =
         Files.createTempDirectory("test-app-files-").toFile()
+
+    /** Unique per-test cache directory (the log export zip). */
+    val cacheDirectory: File =
+        Files.createTempDirectory("test-app-cache-").toFile()
+
+    /** The subdirectory the LogManager writes its dated files into. */
+    val logsDirectory: File =
+        File(filesDirectory, AppNames.LOG_DIRECTORY_NAME)
 
     val component: AppComponent
 
@@ -82,6 +94,7 @@ class TestAppContext(
             component = AppComponent(
                 AppConfig(
                     appFilesDirectory = filesDirectory,
+                    appCacheDirectory = cacheDirectory,
                     connectivityMonitor = connectivityMonitor,
                     minimumLogLevel = minimumLogLevel,
                     // The one HTTP seam: the PRODUCTION factory over a
@@ -100,6 +113,8 @@ class TestAppContext(
                     clock = clock,
                     crashReporter = crashReporter,
                     maxLogFileSizeBytes = maxLogFileSizeBytes,
+                    maxLogRetentionDays = maxLogRetentionDays,
+                    maxLogTotalSizeBytes = maxLogTotalSizeBytes,
                     featureFlagProvider = flagProvider,
                     featureFlagOverridesEnabled =
                         featureFlagOverridesEnabled,
@@ -112,6 +127,7 @@ class TestAppContext(
             // into every later test in the same JVM.
             Dispatchers.resetMain()
             filesDirectory.deleteRecursively()
+            cacheDirectory.deleteRecursively()
             throw constructionFailure
         }
         if (autoStart) component.start()
@@ -135,21 +151,29 @@ class TestAppContext(
         runBlocking { component.logManager.flush() }
         component.close()
         Dispatchers.resetMain()
-        deleteFilesDirectory()
+        deleteTempDirectories()
     }
 
     /**
-     * Deletes the temp directory, retrying briefly instead of ignoring
-     * the result: one already-claimed log append may still be finishing
-     * on the IO pool and can momentarily recreate the log file.
+     * Deletes the temp directories, retrying briefly instead of
+     * ignoring the result: one already-claimed log append may still be
+     * finishing on the IO pool and can momentarily recreate a log file.
      */
-    private fun deleteFilesDirectory() {
+    private fun deleteTempDirectories() {
         repeat(DELETE_RETRY_ATTEMPTS) {
-            if (filesDirectory.deleteRecursively()) return
+            if (filesDirectory.deleteRecursively() &&
+                cacheDirectory.deleteRecursively()
+            ) {
+                return
+            }
             Thread.sleep(DELETE_RETRY_DELAY_MILLISECONDS)
         }
-        check(filesDirectory.deleteRecursively()) {
-            "Could not delete test files directory $filesDirectory"
+        check(
+            filesDirectory.deleteRecursively() &&
+                cacheDirectory.deleteRecursively(),
+        ) {
+            "Could not delete test directories " +
+                "$filesDirectory and $cacheDirectory"
         }
     }
 

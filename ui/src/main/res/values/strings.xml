@@ -45,9 +45,9 @@
     <string name="settings_clear_welcome_supporting">Home shows \"First launch\" until restart</string>
     <string name="settings_section_logs">Logs</string>
     <string name="settings_export_logs_title">Export logs</string>
-    <string name="settings_export_logs_supporting">Share the app\'s log file contents</string>
+    <string name="settings_export_logs_supporting">Share the app\'s log files as a zip</string>
     <string name="settings_clear_logs_title">Clear logs</string>
-    <string name="settings_clear_logs_supporting">Delete the app\'s log file</string>
+    <string name="settings_clear_logs_supporting">Delete the app\'s log files</string>
     <string name="settings_section_about">About</string>
     <string name="settings_version_title">Version</string>
     <string name="settings_build_title">Build</string>
@@ -57,7 +57,7 @@
 
     <!-- Clear-logs confirmation dialog -->
     <string name="clear_logs_dialog_title">Clear logs?</string>
-    <string name="clear_logs_dialog_body">This deletes the app\'s log file and cannot be undone.</string>
+    <string name="clear_logs_dialog_body">This deletes the app\'s log files and cannot be undone.</string>
     <string name="clear_logs_dialog_confirm">Clear logs</string>
     <string name="clear_logs_dialog_cancel">Cancel</string>
 

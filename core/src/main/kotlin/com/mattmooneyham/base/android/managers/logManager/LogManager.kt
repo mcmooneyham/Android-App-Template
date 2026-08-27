@@ -5,6 +5,9 @@ import com.mattmooneyham.base.android.constants.LogLevel
 import com.mattmooneyham.base.android.managers.ConfinedManager
 import com.mattmooneyham.base.android.managers.eventManager.EventManager
 import com.mattmooneyham.base.android.managers.eventManager.SignalKey
+import java.io.FileOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -12,12 +15,18 @@ import kotlin.time.Clock
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format
 import kotlinx.datetime.format.char
+import kotlinx.datetime.minus
 import kotlinx.datetime.toLocalDateTime
 import okio.FileSystem
+import okio.Path
 import okio.Path.Companion.toPath
 import okio.buffer
 import okio.use
@@ -36,6 +45,10 @@ data class LogFileSettings(
     val fileName: String = LogManager.DEFAULT_LOG_FILE_NAME,
     val maxFileSizeBytes: Long = LogManager.DEFAULT_MAX_LOG_FILE_BYTES,
     val fileLoggingEnabled: Boolean = true,
+    val maxDays: Int = LogManager.DEFAULT_MAX_LOG_DAYS,
+    val maxTotalSizeBytes: Long = LogManager.DEFAULT_MAX_LOG_TOTAL_BYTES,
+    /** Directory for the export zip; null disables the export. */
+    val exportDirectoryPath: String? = null,
 )
 
 /**
@@ -89,16 +102,22 @@ class LoggedError internal constructor(
  * ring, so production crash reports carry the recent history even
  * though release builds keep DEBUG traces out of the file.
  *
- * The log file rotates by size: when it reaches
- * [maxLogFileSizeBytes], it is renamed with a `.1` inserted before
- * the extension (base_app.log becomes base_app.1.log, replacing any
- * previous rotation), and a fresh file starts. At most one rotated
- * file is kept, capping total disk use at roughly twice the limit.
+ * Log files roll daily and by size: each UTC day appends into its
+ * own dated file (base_app-2026-01-01.log), and a file reaching
+ * [maxLogFileSizeBytes] is renamed to the next numbered sibling
+ * (base_app-2026-01-01.1.log) so appends continue into a fresh
+ * file. Retention runs asynchronously on the manager's own scope,
+ * never on an append or crash-drain path: files older than
+ * [LogFileSettings.maxDays] days are deleted, then the oldest files
+ * go until the total fits [LogFileSettings.maxTotalSizeBytes] (the
+ * current day's live file is never deleted). [writeExportSnapshot]
+ * zips the whole history for sharing.
  *
  * Provided as a singleton via AppComponent (in :app).
  *
- * @param fileSettings file-side policy (directory, name, rotation
- *   cap, on/off switch), grouped so the wiring stays within budget.
+ * @param fileSettings file-side policy (directory, name, roll and
+ *   retention caps, on/off switch), grouped so the wiring stays
+ *   within budget.
  * @param clock source of wall time for line timestamps; injected so
  *   tests can pin time and assert exact lines.
  * @param sinks the non-file outputs: the platform log mirror (Logcat
@@ -121,9 +140,22 @@ class LogManager(
 ) {
 
     private val logDirectoryPath = fileSettings.directoryPath
-    private val logFileName = fileSettings.fileName
     private val fileLoggingEnabled = fileSettings.fileLoggingEnabled
     private val maxLogFileSizeBytes = fileSettings.maxFileSizeBytes
+    private val maxLogDays = fileSettings.maxDays
+    private val maxLogTotalSizeBytes = fileSettings.maxTotalSizeBytes
+    private val exportDirectoryPath = fileSettings.exportDirectoryPath
+    private val logFileStem = fileSettings.fileName.substringBeforeLast('.')
+    private val logFileExtension =
+        fileSettings.fileName.substringAfterLast('.', "")
+
+    // Deletion (prune, clear) touches ONLY names matching this
+    // pattern, so foreign files in the log directory are never removed.
+    private val logFileNameRegex = Regex(
+        "^${Regex.escape(logFileStem)}-\\d{4}-\\d{2}-\\d{2}" +
+            "(\\.\\d+)?\\.${Regex.escape(logFileExtension)}$",
+    )
+
     private val platformWriter = sinks.platformWriter
     private val crashReporter = sinks.crashReporter
 
@@ -152,8 +184,19 @@ class LogManager(
 
     // Serializes all file access between the background writer and the
     // synchronous drain paths (ERROR flush, flushForCrash), so lines
-    // never interleave and rotation checks stay race-free.
+    // never interleave and roll checks stay race-free.
     private val fileAccessLock = Any()
+
+    // Serializes overlapping exports, which share one staging file and
+    // one final zip path; the zip itself runs outside fileAccessLock
+    // so logging never stalls behind it.
+    private val exportMutex = Mutex()
+
+    // Read and written only under fileAccessLock. Updated only after a
+    // SUCCESSFUL prune, so a failed prune is retried by the next append.
+    private var lastPruneDate: LocalDate? = null
+
+    private val pruneInFlight = AtomicBoolean(false)
 
     init {
         // The single writer loop lives on the manager's confinement;
@@ -200,7 +243,7 @@ class LogManager(
             }
             is LogFileCommand.Clear -> {
                 val cleared =
-                    synchronized(fileAccessLock) { deleteLogFile() }
+                    synchronized(fileAccessLock) { deleteLogFiles() }
                 // Announce only after the delete actually ran,
                 // preserving delete-then-announce order; trigger is
                 // thread-safe from any consumer.
@@ -264,78 +307,164 @@ class LogManager(
         log(LogLevel.DEBUG, message, tag, throwable = null)
     }
 
-    /** Absolute path of the log file, or null while file logging is off. */
+    /**
+     * Absolute path of the CURRENT UTC day's log file (which appends
+     * create on demand), or null while file logging is off.
+     */
     val logFilePath: String?
         get() {
             if (!fileLoggingEnabled) return null
             val directory = logDirectoryPath ?: return null
-            return "$directory/$logFileName"
+            return "$directory/$logFileStem-${currentUtcDate()}" +
+                ".$logFileExtension"
         }
 
     /**
-     * Full contents of the LIVE log file; empty when missing or
-     * unreadable. Rotated history (the ".1" file) is not included.
+     * Full contents of the current day's log file; when nothing has
+     * been appended today yet, the newest existing log file instead,
+     * so callers polling across midnight never see a false empty.
+     * Empty when there are no log files or the read fails. Older
+     * files are not included.
      */
     fun readLogContents(): String {
         val path = logFilePath ?: return ""
         return runCatching {
-            val filePath = path.toPath()
-            if (!FileSystem.SYSTEM.exists(filePath)) null
-            else FileSystem.SYSTEM.read(filePath) { readUtf8() }
+            val todayPath = path.toPath()
+            val sourcePath =
+                if (FileSystem.SYSTEM.exists(todayPath)) todayPath
+                else logFilesOldestFirst().lastOrNull()
+            sourcePath?.let { existingPath ->
+                FileSystem.SYSTEM.read(existingPath) { readUtf8() }
+            }
         }.getOrNull() ?: ""
     }
 
     /**
-     * Writes a quiescent snapshot of the FULL log history (rotated
-     * file first, then the live file: oldest lines first) to a
-     * dedicated export file beside the live log and returns its
-     * absolute path. Flushes the writer first, so every line logged
-     * before the call is included; the copy runs under the file
-     * lock, so it can never observe a half-rotated state. Returns
-     * null when file logging is off or nothing has been logged yet.
-     * Overwritten on each call; deleted by [clearLogs] with the rest
-     * of the history.
+     * Zips the FULL log history (every log file, oldest first) into a
+     * dedicated export file in the configured export directory and
+     * returns its absolute path. Flushes the writer first, so every
+     * line logged before the call is included. The archive is
+     * assembled beside the final name and atomically swapped in, and
+     * overlapping calls are serialized, so a reader never observes a
+     * partial zip. Returns null when file logging or the export
+     * directory is off, nothing has been logged yet, or the write
+     * fails. Overwritten on each call; deleted by [clearLogs] with
+     * the rest of the history.
      */
     suspend fun writeExportSnapshot(): String? {
-        val livePath = logFilePath ?: return null
+        if (logFilePath == null) return null
+        val exportPath = exportZipFilePath ?: return null
         flush()
-        return onIo {
-            synchronized(fileAccessLock) {
-                runCatching {
-                    val sourcePaths = historyFilePaths(livePath)
-                    if (sourcePaths.isEmpty()) {
-                        return@runCatching null
-                    }
-                    val exportPath = exportLogFilePath(livePath)
-                    FileSystem.SYSTEM.write(exportPath.toPath()) {
-                        sourcePaths.forEach { historyPath ->
-                            FileSystem.SYSTEM.source(historyPath)
-                                .use { historySource ->
-                                    writeAll(historySource)
-                                }
-                        }
+        return exportMutex.withLock {
+            onIo { writeExportZip(exportPath) }
+        }
+    }
+
+    /** Callers hold [exportMutex]; see [writeExportSnapshot]. */
+    private fun writeExportZip(exportPath: String): String? {
+        val stagingPath = "$exportPath.tmp"
+        var sourcePaths = snapshotLogFilePaths()
+        var attemptsLeft = EXPORT_ZIP_ATTEMPT_LIMIT
+        while (sourcePaths.isNotEmpty()) {
+            if (!zipFilesTo(stagingPath, sourcePaths)) return null
+            attemptsLeft -= 1
+            val currentPaths = snapshotLogFilePaths()
+            // A roll mid-zip renames the live file away from the
+            // snapshot, silently dropping the newest history; redo
+            // until the name set is stable. The bounded final pass
+            // ships whatever it saw.
+            val fileSetStable = currentPaths.map(Path::name) ==
+                sourcePaths.map(Path::name)
+            if (fileSetStable || attemptsLeft == 0) {
+                return runCatching {
+                    synchronized(fileAccessLock) {
+                        FileSystem.SYSTEM.atomicMove(
+                            stagingPath.toPath(),
+                            exportPath.toPath(),
+                        )
                     }
                     exportPath
                 }.getOrNull()
             }
+            sourcePaths = currentPaths
         }
+        // Nothing to archive, or a clear raced the zip: never hand
+        // back an export the clear just deleted.
+        runCatching {
+            FileSystem.SYSTEM.delete(
+                stagingPath.toPath(),
+                mustExist = false,
+            )
+        }
+        return null
     }
 
-    /** Rotated-then-live, existing files only: oldest lines first. */
-    private fun historyFilePaths(livePath: String) =
-        listOfNotNull(rotatedLogFilePath, livePath)
-            .map { pathString -> pathString.toPath() }
-            .filter { path -> FileSystem.SYSTEM.exists(path) }
-
-    /** "base_app.log" exports as "base_app-export.log". */
-    private fun exportLogFilePath(livePath: String): String {
-        val extension = livePath.substringAfterLast('.', "")
-        return if (extension.isEmpty()) {
-            "$livePath-export"
-        } else {
-            livePath.substringBeforeLast('.') + "-export." + extension
+    private fun snapshotLogFilePaths(): List<Path> =
+        synchronized(fileAccessLock) {
+            runCatching { logFilesOldestFirst() }
+                .getOrDefault(emptyList())
         }
+
+    private fun zipFilesTo(
+        zipPath: String,
+        sourcePaths: List<Path>,
+    ): Boolean = runCatching {
+        ZipOutputStream(FileOutputStream(zipPath)).use { zipStream ->
+            sourcePaths.forEach { sourcePath ->
+                // Per-file guard: a source rolled or pruned away
+                // mid-zip is skipped, not a failed export.
+                runCatching {
+                    zipStream.putNextEntry(ZipEntry(sourcePath.name))
+                    FileSystem.SYSTEM.source(sourcePath)
+                        .buffer()
+                        .use { fileSource ->
+                            fileSource.inputStream()
+                                .copyTo(zipStream)
+                        }
+                    zipStream.closeEntry()
+                }
+            }
+        }
+    }.isSuccess
+
+    private val exportZipFilePath: String?
+        get() {
+            if (!fileLoggingEnabled) return null
+            val exportDirectory = exportDirectoryPath ?: return null
+            return "$exportDirectory/$logFileStem-export.zip"
+        }
+
+    /**
+     * Every log file in the directory, oldest first by the (date,
+     * roll index) parsed from the name; the indexless live file sorts
+     * after its day's rolls because a roll always predates it.
+     */
+    private fun logFilesOldestFirst(): List<Path> {
+        val directory = logDirectoryPath ?: return emptyList()
+        return FileSystem.SYSTEM.listOrNull(directory.toPath())
+            .orEmpty()
+            .filter { entry -> logFileNameRegex.matches(entry.name) }
+            .sortedWith(
+                compareBy(
+                    { entry -> parsedLogFileDate(entry.name) },
+                    { entry -> parsedLogRollIndex(entry.name) },
+                ),
+            )
     }
+
+    private fun parsedLogFileDate(fileName: String): LocalDate =
+        runCatching {
+            LocalDate.parse(
+                fileName.removePrefix("$logFileStem-")
+                    .take(DATE_TEXT_LENGTH),
+            )
+        }.getOrDefault(LocalDate(year = 1970, month = 1, day = 1))
+
+    private fun parsedLogRollIndex(fileName: String): Int =
+        fileName.removePrefix("$logFileStem-")
+            .drop(DATE_TEXT_LENGTH + 1)
+            .substringBefore('.')
+            .toIntOrNull() ?: Int.MAX_VALUE
 
     /**
      * Deletes the log HISTORY. Fire-and-forget: the delete runs on the
@@ -458,7 +587,9 @@ class LogManager(
                 )
             }
         }
-        if (fileLoggingEnabled && logFilePath != null) {
+        // Gate on the directory, not logFilePath: the hot path skips
+        // building the dated name entirely.
+        if (fileLoggingEnabled && logDirectoryPath != null) {
             val enqueued = fileCommands.trySend(
                 LogFileCommand.Append(
                     if (throwable == null) logLine
@@ -532,23 +663,23 @@ class LogManager(
         return "$classPart$methodPart ($filePart:$linePart)"
     }
 
-    /** Path the live file rotates to, ".1" before the extension. */
-    private val rotatedLogFilePath: String?
-        get() {
-            val path = logFilePath ?: return null
-            val extension = path.substringAfterLast('.', "")
-            return if (extension.isEmpty()) {
-                "$path.1"
-            } else {
-                "${path.substringBeforeLast('.')}.1.$extension"
-            }
-        }
-
     /** Callers hold [fileAccessLock]; see [executeFileCommand]. */
     private fun appendToLogFile(logLine: String) {
         val path = logFilePath ?: return
         runCatching {
-            rotateLogFileIfOversized(path)
+            // Crash drains run this path: schedule retention instead
+            // of pruning inline, so a dying process never scans here.
+            val today = currentUtcDate()
+            if (lastPruneDate != null && lastPruneDate != today) {
+                schedulePrune()
+            }
+            logDirectoryPath?.let { directory ->
+                FileSystem.SYSTEM.createDirectories(
+                    directory.toPath(),
+                    mustCreate = false,
+                )
+            }
+            rollLogFileIfOversized(path)
             FileSystem.SYSTEM
                 .appendingSink(path.toPath(), mustExist = false)
                 .buffer()
@@ -586,47 +717,71 @@ class LogManager(
     }
 
     /**
-     * Size-capped rotation: once the live file reaches the cap it
-     * becomes the single ".1" history file (replacing any previous
-     * one) and appends continue into a fresh live file.
+     * Size-capped roll: once the live file reaches the cap it is
+     * renamed to the day's next numbered sibling and appends continue
+     * into a fresh live file. Callers hold [fileAccessLock].
      */
-    private fun rotateLogFileIfOversized(livePath: String) {
-        val rotatedPath = rotatedLogFilePath ?: return
+    private fun rollLogFileIfOversized(livePath: String) {
         val liveFilePath = livePath.toPath()
         val liveSize =
             FileSystem.SYSTEM.metadataOrNull(liveFilePath)?.size ?: 0L
         if (liveSize < maxLogFileSizeBytes) return
         runCatching {
-            FileSystem.SYSTEM.delete(
-                rotatedPath.toPath(),
-                mustExist = false,
-            )
             FileSystem.SYSTEM.atomicMove(
                 liveFilePath,
-                rotatedPath.toPath(),
+                nextRolledFilePath(liveFilePath),
             )
         }
+        schedulePrune()
+    }
+
+    /** "stem-date.log" rolls to "stem-date.<highest + 1>.log". */
+    private fun nextRolledFilePath(liveFilePath: Path): Path {
+        val rollBaseName =
+            liveFilePath.name.removeSuffix(".$logFileExtension")
+        val rollIndexRegex = Regex(
+            "^${Regex.escape(rollBaseName)}\\.(\\d+)" +
+                "\\.${Regex.escape(logFileExtension)}$",
+        )
+        val parentDirectory = liveFilePath.parent
+        val highestRollIndex = parentDirectory
+            ?.let { directory -> FileSystem.SYSTEM.listOrNull(directory) }
+            .orEmpty()
+            .mapNotNull { entry ->
+                rollIndexRegex.matchEntire(entry.name)
+                    ?.groupValues?.get(1)?.toIntOrNull()
+            }
+            .maxOrNull() ?: 0
+        val rolledName =
+            "$rollBaseName.${highestRollIndex + 1}.$logFileExtension"
+        return parentDirectory?.resolve(rolledName)
+            ?: rolledName.toPath()
     }
 
     /**
-     * Deletes the live AND rotated files (clearing history means all
-     * of it). Callers hold [fileAccessLock].
+     * Deletes every log file plus the export zip (clearing history
+     * means all of it); files not matching the log naming pattern are
+     * left alone. Callers hold [fileAccessLock].
      */
-    private fun deleteLogFile(): Boolean {
-        val path = logFilePath ?: return true
+    private fun deleteLogFiles(): Boolean {
+        val directory = logDirectoryPath ?: return true
         return runCatching {
-            rotatedLogFilePath?.let { rotatedPath ->
+            exportZipFilePath?.let { exportPath ->
                 FileSystem.SYSTEM.delete(
-                    rotatedPath.toPath(),
+                    exportPath.toPath(),
                     mustExist = false,
                 )
             }
-            // "Clear logs" clears ALL of it, the export copy too.
-            FileSystem.SYSTEM.delete(
-                exportLogFilePath(path).toPath(),
-                mustExist = false,
-            )
-            FileSystem.SYSTEM.delete(path.toPath(), mustExist = false)
+            val directoryEntries =
+                FileSystem.SYSTEM.listOrNull(directory.toPath())
+                    ?: return@runCatching true
+            directoryEntries
+                .filter { entry ->
+                    logFileNameRegex.matches(entry.name)
+                }
+                .forEach { logFile ->
+                    FileSystem.SYSTEM.delete(logFile, mustExist = false)
+                }
             true
         }.getOrElse { deleteFailure ->
             // A failed clear must not be invisible: the file cannot
@@ -644,18 +799,125 @@ class LogManager(
         }
     }
 
+    /**
+     * Runs the initial retention prune, deferred out of construction
+     * per the init budget (no IO in the constructor).
+     */
+    override fun start() {
+        schedulePrune()
+    }
+
+    /**
+     * Schedules one retention prune on the manager scope; a prune
+     * already in flight absorbs the request.
+     */
+    private fun schedulePrune() {
+        if (!pruneInFlight.compareAndSet(
+                expectedValue = false,
+                newValue = true,
+            )
+        ) {
+            return
+        }
+        managerScope.launch {
+            try {
+                onIo {
+                    val today = currentUtcDate()
+                    synchronized(fileAccessLock) {
+                        pruneLogDirectory(today)
+                    }
+                }
+            } finally {
+                pruneInFlight.store(false)
+            }
+        }
+    }
+
+    /**
+     * Retention: deletes log files older than [maxLogDays] days, then
+     * the oldest files (by filesystem modification time) until the
+     * total fits [maxLogTotalSizeBytes]. The current live file is
+     * never deleted, so usage may transiently reach the total cap
+     * plus one file. Callers hold [fileAccessLock].
+     */
+    private fun pruneLogDirectory(today: LocalDate) {
+        if (logFilePath == null) return
+        val pruneSucceeded = runCatching {
+            val oldestRetainedDate =
+                today.minus(maxLogDays - 1, DateTimeUnit.DAY)
+            val retainedFiles = logFilesOldestFirst()
+                .filterNot { logFile ->
+                    val fileDate = parsedLogFileDate(logFile.name)
+                    val expired = fileDate < oldestRetainedDate
+                    if (expired) {
+                        FileSystem.SYSTEM.delete(
+                            logFile,
+                            mustExist = false,
+                        )
+                    }
+                    expired
+                }
+            enforceTotalSizeCap(retainedFiles)
+        }.isSuccess
+        if (pruneSucceeded) lastPruneDate = today
+    }
+
+    private fun enforceTotalSizeCap(retainedFiles: List<Path>) {
+        val livePath = logFilePath?.toPath()
+        var totalSizeBytes = retainedFiles.sumOf { logFile ->
+            FileSystem.SYSTEM.metadataOrNull(logFile)?.size ?: 0L
+        }
+        val evictionCandidates = retainedFiles
+            .filterNot { logFile -> logFile == livePath }
+            .sortedBy { logFile ->
+                FileSystem.SYSTEM.metadataOrNull(logFile)
+                    ?.lastModifiedAtMillis ?: 0L
+            }
+        for (evictionCandidate in evictionCandidates) {
+            if (totalSizeBytes <= maxLogTotalSizeBytes) break
+            val candidateSizeBytes =
+                FileSystem.SYSTEM.metadataOrNull(evictionCandidate)
+                    ?.size ?: 0L
+            FileSystem.SYSTEM.delete(
+                evictionCandidate,
+                mustExist = false,
+            )
+            totalSizeBytes -= candidateSizeBytes
+        }
+    }
+
     private fun currentUtcTimestamp(): String = clock.now()
         .toLocalDateTime(TimeZone.UTC)
         .format(LOG_TIMESTAMP_FORMAT)
 
+    private fun currentUtcDate(): LocalDate = clock.now()
+        .toLocalDateTime(TimeZone.UTC)
+        .date
+
     companion object {
         const val DEFAULT_LOG_FILE_NAME = AppNames.LOG_FILE_NAME
 
-        // Rotation cap: two files of this size is ample demo/support
-        // history while staying invisible next to any app's cache use.
-        const val DEFAULT_MAX_LOG_FILE_BYTES = 512L * 1024L
+        // Roll cap for a single file; the total-size cap below, not
+        // this, is what bounds overall disk use.
+        const val DEFAULT_MAX_LOG_FILE_BYTES = 10L * 1024L * 1024L
+
+        /** Days of log history kept, the current day included. */
+        const val DEFAULT_MAX_LOG_DAYS = 7
+
+        /**
+         * Retention cap across all log files. Pruning runs
+         * asynchronously after a roll, so disk use may transiently
+         * reach this cap plus one file of [DEFAULT_MAX_LOG_FILE_BYTES].
+         */
+        const val DEFAULT_MAX_LOG_TOTAL_BYTES = 250L * 1024L * 1024L
+
+        private val DATE_TEXT_LENGTH = "yyyy-MM-dd".length
         private const val DEFAULT_TAG = "App"
         private const val WRITER_BUFFER_CAPACITY = 512
+
+        // Two zip passes absorb the single roll that can plausibly
+        // land mid-export; the final pass ships regardless.
+        private const val EXPORT_ZIP_ATTEMPT_LIMIT = 2
 
         // Bounds the synchronous ERROR-level drain: ample for the
         // common near-empty queue, small enough that a full

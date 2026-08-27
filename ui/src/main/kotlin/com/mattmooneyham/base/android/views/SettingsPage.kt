@@ -105,12 +105,12 @@ fun SettingsPage(settingsViewModel: SettingsViewModel) {
                 val exportPath =
                     settingsViewModel.writeLogExportSnapshot()
                 val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
                     putExtra(Intent.EXTRA_SUBJECT, logsExportSubject)
                     if (exportPath != null) {
-                        // The FULL history rides a content URI; text
-                        // extras would drop the rotated half and can
+                        // The zip of the FULL history rides a content
+                        // URI; a text extra cannot carry binary and can
                         // blow the ~1 MB Binder transaction cap.
+                        type = "application/zip"
                         val exportUri = FileProvider.getUriForFile(
                             context,
                             "${context.packageName}.logexport",
@@ -121,6 +121,7 @@ fun SettingsPage(settingsViewModel: SettingsViewModel) {
                             Intent.FLAG_GRANT_READ_URI_PERMISSION,
                         )
                     } else {
+                        type = "text/plain"
                         putExtra(
                             Intent.EXTRA_TEXT,
                             logsExportNoneMessage,
